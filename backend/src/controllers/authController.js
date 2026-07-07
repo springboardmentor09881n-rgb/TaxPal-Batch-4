@@ -1,4 +1,4 @@
-const User = require('../models/User');
+const User = require('../models/User.model');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 
@@ -8,8 +8,8 @@ exports.registerUser = async (req, res) => {
     const { username, password, fullName, email, country, incomeBracket } = req.body;
 
     // Check if user already exists
-    const existingUser = await User.findOne({ where: { email } });
-    const existingUsername = await User.findOne({ where: { username } });
+    const existingUser = await User.findOne({ email });
+    const existingUsername = await User.findOne({ username });
     if (existingUser || existingUsername) {
       return res.status(400).json({ message: 'User already exists' });
     }
@@ -41,7 +41,7 @@ exports.loginUser = async (req, res) => {
     const { username, password } = req.body;
 
     // Find the user by username
-    const user = await User.findOne({ where: { username } });
+    const user = await User.findOne({ username });
     if (!user) {
       return res.status(400).json({ message: 'Invalid credentials' });
     }
@@ -55,7 +55,7 @@ exports.loginUser = async (req, res) => {
     // Create a JWT payload
     const payload = {
       user: {
-        id: user.id,
+        id: user._id,
       },
     };
 
@@ -66,7 +66,7 @@ exports.loginUser = async (req, res) => {
       { expiresIn: '1d' },
       (err, token) => {
         if (err) throw err;
-        res.json({ token, user: { id: user.id, username: user.username, fullName: user.fullName, email: user.email } });
+        res.json({ token, user: { id: user._id, username: user.username, fullName: user.fullName, email: user.email } });
       }
     );
   } catch (error) {

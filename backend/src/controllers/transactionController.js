@@ -1,12 +1,9 @@
-const Transaction = require('../models/Transaction');
+const Transaction = require('../models/Transaction.model');
 
 // Get all transactions for a user
 exports.getTransactions = async (req, res) => {
   try {
-    const transactions = await Transaction.findAll({
-      where: { userId: req.user.id },
-      order: [['date', 'DESC']],
-    });
+    const transactions = await Transaction.find({ userId: req.user.id }).sort({ date: -1 });
     res.json(transactions);
   } catch (error) {
     console.error('Error fetching transactions:', error);
@@ -39,18 +36,18 @@ exports.createTransaction = async (req, res) => {
 // Delete a transaction
 exports.deleteTransaction = async (req, res) => {
   try {
-    const transaction = await Transaction.findByPk(req.params.id);
+    const transaction = await Transaction.findById(req.params.id);
 
     if (!transaction) {
       return res.status(404).json({ message: 'Transaction not found' });
     }
 
     // Make sure user owns transaction
-    if (transaction.userId !== req.user.id) {
+    if (transaction.userId.toString() !== req.user.id.toString()) {
       return res.status(401).json({ message: 'Not authorized' });
     }
 
-    await transaction.destroy();
+    await Transaction.findByIdAndDelete(req.params.id);
 
     res.json({ message: 'Transaction removed' });
   } catch (error) {
