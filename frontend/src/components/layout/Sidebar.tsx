@@ -4,6 +4,7 @@ import { getCurrentUser } from '../../services/storage';
 
 export default function Sidebar({ userName, active, setActive }: { userName: string; active: Page; setActive: (p: Page) => void }) {
   const navItems: Page[] = ['Dashboard', 'Transactions', 'Budgets', 'Tax Estimate', 'Reports'];
+  // (Reports moved to the top per UI request is handled by reordering navItems above.)
   const cur = getCurrentUser();
   const displayName = userName || (cur?.fullName || cur?.username || 'User');
 

@@ -18,11 +18,17 @@ export default function TaxEstimate({ estimate, setEstimate }: { estimate: numbe
     setEstimate(Number(tax.toFixed(2)));
   };
 
+  const totalDeductions = [businessExpenses, retirement, insurance, homeOffice].reduce((sum, value) => sum + Number(value), 0);
+  const taxableIncome = Math.max(0, Number(grossIncome) - totalDeductions);
+
   return (
     <div className="grid-layout">
       <div className="panel-block">
         <div className="section-title">Quarterly Tax Calculator</div>
         <form className="form-grid" onSubmit={calculate}>
+          <div style={{ gridColumn: '1 / -1', borderBottom: '1px solid #e0e0e0', paddingBottom: '15px', marginBottom: '10px' }}>
+            <h3 style={{ margin: '0 0 10px 0', fontSize: '14px', fontWeight: '600', color: '#666' }}>Filing Information</h3>
+          </div>
           <label>
             Country/Region
             <input value={country} onChange={(event) => setCountry(event.target.value)} />
@@ -48,6 +54,9 @@ export default function TaxEstimate({ estimate, setEstimate }: { estimate: numbe
               <option>Q4</option>
             </select>
           </label>
+          <div style={{ gridColumn: '1 / -1', borderBottom: '1px solid #e0e0e0', paddingBottom: '15px', marginBottom: '10px', marginTop: '10px' }}>
+            <h3 style={{ margin: '0 0 10px 0', fontSize: '14px', fontWeight: '600', color: '#666' }}>Income & Deductions</h3>
+          </div>
           <label>
             Gross Income for Quarter
             <input value={grossIncome} type="number" onChange={(event) => setGrossIncome(event.target.value)} />
@@ -68,25 +77,46 @@ export default function TaxEstimate({ estimate, setEstimate }: { estimate: numbe
             Home Office Deduction
             <input value={homeOffice} type="number" onChange={(event) => setHomeOffice(event.target.value)} />
           </label>
-          <button type="submit">Calculate Estimated Tax</button>
+          <button type="submit" style={{ gridColumn: '1 / -1' }}>Calculate Estimated Tax</button>
         </form>
       </div>
       <div className="panel-block">
         <div className="section-title">Tax Summary</div>
-        <div className="summary-card">
-          <p>Your estimated quarterly tax obligation is</p>
-          <strong>${estimate.toFixed(2)}</strong>
-          <p>Review your deductions or update income details to refine this estimate.</p>
+        <div className="summary-card" style={{ backgroundColor: '#f8f9fa', padding: '20px', borderRadius: '8px', marginBottom: '20px' }}>
+          <div style={{ marginBottom: '15px' }}>
+            <p style={{ color: '#666', margin: '0 0 8px 0', fontSize: '13px' }}>Gross Income</p>
+            <strong style={{ fontSize: '18px', color: '#333' }}>${Number(grossIncome).toFixed(2)}</strong>
+          </div>
+          <div style={{ marginBottom: '15px', paddingBottom: '15px', borderBottom: '1px solid #e0e0e0' }}>
+            <p style={{ color: '#666', margin: '0 0 8px 0', fontSize: '13px' }}>Total Deductions</p>
+            <strong style={{ fontSize: '18px', color: '#333' }}>-${totalDeductions.toFixed(2)}</strong>
+          </div>
+          <div style={{ marginBottom: '15px' }}>
+            <p style={{ color: '#666', margin: '0 0 8px 0', fontSize: '13px' }}>Taxable Income</p>
+            <strong style={{ fontSize: '18px', color: '#333' }}>${taxableIncome.toFixed(2)}</strong>
+          </div>
+          <div style={{ paddingTop: '15px', borderTop: '2px solid #007bff', backgroundColor: '#e7f3ff', padding: '15px', borderRadius: '6px' }}>
+            <p style={{ color: '#666', margin: '0 0 8px 0', fontSize: '13px' }}>Estimated Tax Obligation</p>
+            <strong style={{ fontSize: '24px', color: '#007bff' }}>${estimate.toFixed(2)}</strong>
+          </div>
         </div>
-        <div className="section-title">Tax Calendar</div>
+        <div className="section-title">Important Dates</div>
         <div className="timeline-card">
           <div className="timeline-item">
-            <strong>Reminder: Q2 Estimated Tax Payment</strong>
+            <strong>Q1 Estimated Tax Payment</strong>
+            <span>Apr 15, 2025</span>
+          </div>
+          <div className="timeline-item">
+            <strong>Q2 Estimated Tax Payment</strong>
             <span>Jun 15, 2025</span>
           </div>
           <div className="timeline-item">
             <strong>Q3 Estimated Tax Payment</strong>
             <span>Sep 15, 2025</span>
+          </div>
+          <div className="timeline-item">
+            <strong>Q4 Estimated Tax Payment</strong>
+            <span>Jan 15, 2026</span>
           </div>
         </div>
       </div>
