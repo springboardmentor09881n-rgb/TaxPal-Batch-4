@@ -213,14 +213,12 @@ interface CategoryTotal {
               </div>
 
               <!-- Legends -->
-              <div class="w-full space-y-2 text-xs">
+              <div class="w-full space-y-2.5 text-xs">
                 @for (cat of categoryTotals().slice(0, 5); track $index) {
-                  <div class="flex justify-between items-center">
-                    <span class="flex items-center gap-2 text-slate-600">
-                      <span class="h-2.5 w-2.5 rounded-full shrink-0" [style.background-color]="cat.color"></span>
-                      {{ cat.name }}
-                    </span>
-                    <span class="font-bold text-slate-900">{{ cat.percentage.toFixed(0) }}%</span>
+                  <div class="flex items-center gap-2">
+                    <span class="h-2.5 w-2.5 rounded-full shrink-0" [style.background-color]="cat.color"></span>
+                    <span class="flex-grow text-slate-600 truncate">{{ cat.name }}</span>
+                    <span class="font-bold text-slate-900 shrink-0">{{ cat.percentage.toFixed(0) }}%</span>
                   </div>
                 }
               </div>
@@ -492,11 +490,24 @@ export class Dashboard {
     });
   });
 
+  /** Vivid, visually distinct palette for pie slices */
+  private readonly PIE_COLORS = [
+    '#6366f1', // indigo
+    '#10b981', // emerald
+    '#f59e0b', // amber
+    '#ef4444', // red
+    '#3b82f6', // blue
+    '#ec4899', // pink
+    '#14b8a6', // teal
+    '#f97316', // orange
+    '#8b5cf6', // violet
+    '#06b6d4', // cyan
+  ];
+
   protected categoryTotals = computed<CategoryTotal[]>(() => {
     const expenses = this.dataService.transactions().filter(t => t.type === 'expense');
-    const categories = this.dataService.categories().filter(c => c.type === 'expense');
     const totalExp = expenses.reduce((sum, t) => sum + t.amount, 0);
-    
+
     if (totalExp === 0) return [];
 
     const totalsMap: { [key: string]: number } = {};
@@ -504,28 +515,34 @@ export class Dashboard {
       totalsMap[t.category] = (totalsMap[t.category] || 0) + t.amount;
     });
 
-    return Object.keys(totalsMap)
+    const sorted = Object.keys(totalsMap)
       .filter(catName => catName && catName.trim() !== '')
-      .map(catName => {
-        const amount = totalsMap[catName] || 0;
-        const percentage = (amount / totalExp) * 100;
-        const catObj = categories.find(c => c.name === catName);
-        return {
-          name: catName,
-          amount,
-          percentage,
-          color: catObj ? catObj.color : '#64748b'
-        };
-      }).sort((a, b) => b.amount - a.amount);
+      .map(catName => ({
+        name: catName,
+        amount: totalsMap[catName] || 0,
+        percentage: ((totalsMap[catName] || 0) / totalExp) * 100,
+        color: '#64748b' // placeholder, assigned below
+      }))
+      .sort((a, b) => b.amount - a.amount);
+
+    // Assign vivid colors in order
+    return sorted.map((cat, i) => ({
+      ...cat,
+      color: this.PIE_COLORS[i % this.PIE_COLORS.length]
+    }));
   });
 
   protected donutSlices = computed(() => {
-    let accumulatedPercent = 0;
+    // SVG circumference for r=15.9155 ≈ 100 units (so 1% = 1 unit)
+    const CIRC = 100;
+    let accumulated = 0;
     return this.categoryTotals().map(cat => {
-      const percent = cat.percentage;
-      const dashArray = `${percent.toFixed(2)} ${(100 - percent).toFixed(2)}`;
-      const dashOffset = (-accumulatedPercent).toFixed(2);
-      accumulatedPercent += percent;
+      const pct = cat.percentage;
+      const dashArray = `${pct.toFixed(3)} ${(CIRC - pct).toFixed(3)}`;
+      // dashOffset starts at 0 for the first slice; each subsequent slice is offset by the sum of previous percentages
+      // SVG stroke starts at 3 o'clock; we rotate the whole SVG -90deg so it starts at 12 o'clock
+      const dashOffset = (-(accumulated)).toFixed(3);
+      accumulated += pct;
       return {
         name: cat.name,
         color: cat.color,

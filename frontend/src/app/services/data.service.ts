@@ -82,16 +82,21 @@ export class DataService {
   public async login(username: string, password: string): Promise<boolean> {
     try {
       const response = await firstValueFrom(
-        this.http.post<{ token: string; user: User }>(`${this.apiUrl}/auth/login`, { username, password }).pipe(
+        this.http.post<{ token: string; user: any }>(`${this.apiUrl}/auth/login`, { username, password }).pipe(
           catchError(() => of(null))
         )
       );
 
       if (response?.token && response.user) {
+        // Normalize: backend returns fullName, frontend expects name
+        const normalizedUser = {
+          ...response.user,
+          name: response.user.name || response.user.fullName || response.user.username,
+        };
         sessionStorage.setItem('tp_token', response.token);
-        sessionStorage.setItem('tp_active_user', JSON.stringify(response.user));
-        this.currentUser.set(response.user);
-        this.loadUserData(response.user.id);
+        sessionStorage.setItem('tp_active_user', JSON.stringify(normalizedUser));
+        this.currentUser.set(normalizedUser);
+        this.loadUserData(normalizedUser.id || normalizedUser._id);
         return true;
       }
     } catch {
@@ -102,9 +107,14 @@ export class DataService {
     const user = users.find((u: any) => u.username === username.trim() && u.password === password.trim());
     if (user) {
       const { password: _, ...userSession } = user;
-      sessionStorage.setItem('tp_active_user', JSON.stringify(userSession));
-      this.currentUser.set(userSession);
-      this.loadUserData(userSession.id);
+      // Ensure name is always set
+      const normalizedSession = {
+        ...userSession,
+        name: userSession.name || userSession.fullName || userSession.username,
+      };
+      sessionStorage.setItem('tp_active_user', JSON.stringify(normalizedSession));
+      this.currentUser.set(normalizedSession);
+      this.loadUserData(normalizedSession.id);
       return true;
     }
     return false;
@@ -118,8 +128,7 @@ export class DataService {
           password: signupData.password,
           fullName: signupData.name,
           email: signupData.email,
-          country: 'India',
-          state: signupData.state || 'Maharashtra',
+          country: signupData.country || 'India',
           incomeBracket: signupData.incomeBracket || 'Medium'
         }).pipe(catchError(() => of(null)))
       );
@@ -142,8 +151,7 @@ export class DataService {
       password: signupData.password,
       name: signupData.name,
       email: signupData.email,
-      country: 'India',
-      state: signupData.state || 'Maharashtra',
+      country: signupData.country || 'India',
       incomeBracket: signupData.incomeBracket || 'Medium'
     };
 
@@ -154,6 +162,35 @@ export class DataService {
     this.seedDefaultTransactions(newUser.id);
 
     return this.login(newUser.username, newUser.password);
+  }
+
+  public async forgotPassword(email: string): Promise<{ success: boolean; message: string }> {
+    try {
+      const response = await firstValueFrom(
+        this.http.post<{ message: string }>(`${this.apiUrl}/auth/forgot-password`, { email }).pipe(
+          catchError((err) => of({ message: err?.error?.message || 'Error sending reset email.' }))
+        )
+      );
+      return { success: true, message: response?.message || 'Reset email sent.' };
+    } catch {
+      return { success: false, message: 'Unable to connect. Please try again.' };
+    }
+  }
+
+  public async resetPassword(token: string, newPassword: string): Promise<{ success: boolean; message: string }> {
+    try {
+      const response = await firstValueFrom(
+        this.http.post<{ message: string }>(`${this.apiUrl}/auth/reset-password`, { token, newPassword }).pipe(
+          catchError((err) => of({ message: err?.error?.message || 'Reset failed.', __error: true } as any))
+        )
+      );
+      if ((response as any).__error) {
+        return { success: false, message: response.message };
+      }
+      return { success: true, message: response.message };
+    } catch {
+      return { success: false, message: 'Unable to connect. Please try again.' };
+    }
   }
 
   public logout(): void {
