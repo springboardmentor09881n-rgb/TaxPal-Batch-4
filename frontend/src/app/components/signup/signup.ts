@@ -213,50 +213,21 @@ export class Signup implements OnInit {
   }
 
   private async loadCountries(): Promise<void> {
-    try {
-      const res = await fetch('https://restcountries.com/v3.1/all?fields=name,currencies');
-      const data: any[] = await res.json();
-
-      const parsed: CountryOption[] = data
-        .map((c: any) => {
-          const currencyCode = Object.keys(c.currencies || {})[0];
-          const currency = c.currencies?.[currencyCode];
-          return {
-            name: c.name.common,
-            currency: currency?.name || currencyCode || 'Unknown',
-            symbol: currency?.symbol || currencyCode || '$',
-          };
-        })
-        .filter(c => c.name)
-        .sort((a, b) => a.name.localeCompare(b.name));
-
-      // Put India first
-      const india = parsed.find(c => c.name === 'India');
-      const rest = parsed.filter(c => c.name !== 'India');
-      const ordered = india ? [india, ...rest] : parsed;
-
-      this.countries.set(ordered);
-      this.selectedCountry = 'India';
-      this.updateIncomeBrackets('India');
-    } catch {
-      // Fallback to common countries
-      const fallback: CountryOption[] = [
-        { name: 'India', currency: 'Indian Rupee', symbol: '₹' },
-        { name: 'United States', currency: 'US Dollar', symbol: '$' },
-        { name: 'United Kingdom', currency: 'British Pound', symbol: '£' },
-        { name: 'European Union', currency: 'Euro', symbol: '€' },
-        { name: 'Japan', currency: 'Japanese Yen', symbol: '¥' },
-        { name: 'Canada', currency: 'Canadian Dollar', symbol: 'CA$' },
-        { name: 'Australia', currency: 'Australian Dollar', symbol: 'A$' },
-        { name: 'Singapore', currency: 'Singapore Dollar', symbol: 'S$' },
-        { name: 'United Arab Emirates', currency: 'UAE Dirham', symbol: 'AED' },
-      ];
-      this.countries.set(fallback);
-      this.selectedCountry = 'India';
-      this.updateIncomeBrackets('India');
-    } finally {
-      this.loadingCountries.set(false);
-    }
+    const countriesList: CountryOption[] = [
+      { name: 'India', currency: 'Indian Rupee', symbol: '₹' },
+      { name: 'United States', currency: 'US Dollar', symbol: '$' },
+      { name: 'United Kingdom', currency: 'British Pound', symbol: '£' },
+      { name: 'European Union', currency: 'Euro', symbol: '€' },
+      { name: 'Japan', currency: 'Japanese Yen', symbol: '¥' },
+      { name: 'Canada', currency: 'Canadian Dollar', symbol: 'CA$' },
+      { name: 'Australia', currency: 'Australian Dollar', symbol: 'A$' },
+      { name: 'Singapore', currency: 'Singapore Dollar', symbol: 'S$' },
+      { name: 'United Arab Emirates', currency: 'UAE Dirham', symbol: 'AED' },
+    ];
+    this.countries.set(countriesList);
+    this.selectedCountry = 'India';
+    this.updateIncomeBrackets('India');
+    this.loadingCountries.set(false);
   }
 
   protected onCountryChange(countryName: string): void {
