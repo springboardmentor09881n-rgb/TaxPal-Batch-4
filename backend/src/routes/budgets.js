@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { getBudgets, createBudget, updateBudget, deleteBudget } = require('../controllers/budgetController');
-const { protect } = require('../middleware/authMiddleware');
+const protect = require('../middleware/authMiddleware');
 
 router.route('/')
   .get(protect, getBudgets)

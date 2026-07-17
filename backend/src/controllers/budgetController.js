@@ -6,7 +6,7 @@ const Transaction = require('../models/Transaction.model');
 // @access  Private
 exports.getBudgets = async (req, res) => {
   try {
-    const budgets = await Budget.find({ userId: req.user._id });
+    const budgets = await Budget.find({ userId: req.user.id });
     
     // Calculate spent amount for each budget
     const budgetsWithSpent = await Promise.all(budgets.map(async (budget) => {
@@ -23,7 +23,7 @@ exports.getBudgets = async (req, res) => {
          const endOfMonth = new Date(budgetMonthDate.getFullYear(), budgetMonthDate.getMonth() + 1, 0, 23, 59, 59);
 
          const transactions = await Transaction.find({
-            userId: req.user._id,
+            userId: req.user.id,
             category: budget.category,
             type: 'expense',
             date: { $gte: startOfMonth, $lte: endOfMonth }
@@ -53,13 +53,13 @@ exports.createBudget = async (req, res) => {
   const { category, budget_amount, month, description } = req.body;
 
   try {
-    const existingBudget = await Budget.findOne({ userId: req.user._id, category, month });
+    const existingBudget = await Budget.findOne({ userId: req.user.id, category, month });
     if (existingBudget) {
       return res.status(400).json({ message: 'Budget for this category and month already exists' });
     }
 
     const budget = new Budget({
-      userId: req.user._id,
+      userId: req.user.id,
       category,
       budget_amount,
       month,
@@ -80,7 +80,7 @@ exports.updateBudget = async (req, res) => {
   const { category, budget_amount, month, description } = req.body;
 
   try {
-    let budget = await Budget.findOne({ _id: req.params.id, userId: req.user._id });
+    let budget = await Budget.findOne({ _id: req.params.id, userId: req.user.id });
 
     if (!budget) {
       return res.status(404).json({ message: 'Budget not found' });
@@ -103,7 +103,7 @@ exports.updateBudget = async (req, res) => {
 // @access  Private
 exports.deleteBudget = async (req, res) => {
   try {
-    const budget = await Budget.findOneAndDelete({ _id: req.params.id, userId: req.user._id });
+    const budget = await Budget.findOneAndDelete({ _id: req.params.id, userId: req.user.id });
 
     if (!budget) {
       return res.status(404).json({ message: 'Budget not found' });
