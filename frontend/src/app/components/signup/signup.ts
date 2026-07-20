@@ -88,6 +88,7 @@ import { AuthService } from '../../services/auth.service';
               [(ngModel)]="state"
               class="w-full px-4 py-2.5 text-sm bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
+            <option value="India">India</option>
               <option value="Maharashtra">Maharashtra</option>
               <option value="Karnataka">Karnataka</option>
               <option value="Delhi">Delhi</option>

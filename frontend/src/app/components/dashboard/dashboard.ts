@@ -1,5 +1,6 @@
 import { Component, signal, computed, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import { DataService } from '../../services/data.service';
 import { Category } from '../../models';
 
@@ -128,49 +129,54 @@ interface CategoryTotal {
           </div>
           
           <!-- SVG Bar Chart -->
-          <div class="h-64 w-full">
-            <svg class="w-full h-full" viewBox="0 0 600 220" preserveAspectRatio="none">
-              <!-- Grid lines -->
-              <line x1="45" y1="20" x2="580" y2="20" stroke="#f1f5f9" stroke-width="1" />
-              <line x1="45" y1="70" x2="580" y2="70" stroke="#f1f5f9" stroke-width="1" />
-              <line x1="45" y1="120" x2="580" y2="120" stroke="#f1f5f9" stroke-width="1" />
-              <line x1="45" y1="170" x2="580" y2="170" stroke="#f1f5f9" stroke-width="1" />
+          <div class="h-[300px] w-full">
+            <svg class="w-full h-full" viewBox="0 0 600 300" preserveAspectRatio="none">
+              <!-- Evenly spaced horizontal grid lines -->
+              <line x1="60" y1="20" x2="580" y2="20" stroke="#f1f5f9" stroke-width="1" />
+              <line x1="60" y1="75" x2="580" y2="75" stroke="#f1f5f9" stroke-width="1" />
+              <line x1="60" y1="130" x2="580" y2="130" stroke="#f1f5f9" stroke-width="1" />
+              <line x1="60" y1="185" x2="580" y2="185" stroke="#f1f5f9" stroke-width="1" />
 
-              <!-- Y Axis labels (Adapted for Indian Lakhs) -->
-              <text x="35" y="24" fill="#94a3b8" font-size="10" text-anchor="end">₹2.0L</text>
-              <text x="35" y="74" fill="#94a3b8" font-size="10" text-anchor="end">₹1.0L</text>
-              <text x="35" y="124" fill="#94a3b8" font-size="10" text-anchor="end">₹50k</text>
-              <text x="35" y="174" fill="#94a3b8" font-size="10" text-anchor="end">₹0</text>
+              <!-- X Axis (baseline, at the bottom of the chart) -->
+              <line x1="60" y1="240" x2="580" y2="240" stroke="#cbd5e1" stroke-width="1.5" />
+
+              <!-- Y Axis labels (fixed tick set) -->
+              <text x="50" y="24" fill="#94a3b8" font-size="11" text-anchor="end">₹10k</text>
+              <text x="50" y="79" fill="#94a3b8" font-size="11" text-anchor="end">₹8k</text>
+              <text x="50" y="134" fill="#94a3b8" font-size="11" text-anchor="end">₹5k</text>
+              <text x="50" y="189" fill="#94a3b8" font-size="11" text-anchor="end">₹3k</text>
+              <text x="50" y="244" fill="#94a3b8" font-size="11" text-anchor="end">₹0</text>
 
               <!-- Dynamic Monthly Bars -->
               @for (bar of monthlyBars(); track $index) {
                 <g [attr.data-index]="$index">
                   <!-- Income Bar -->
                   <rect 
-                    [attr.x]="65 + $index * 85" 
-                    [attr.y]="170 - bar.income" 
-                    width="14" 
-                    [attr.height]="bar.income" 
+                    [attr.x]="60 + $index * 85" 
+                    [attr.y]="240 - barPixelHeight(bar.income)" 
+                    width="18" 
+                    [attr.height]="barPixelHeight(bar.income)" 
                     fill="#10b981" 
-                    rx="3"
+                    rx="4"
                     class="transition-all duration-500"
                   />
-                  <!-- Expense Bar -->
+                  <!-- Expense Bar (small gap after the Income bar) -->
                   <rect 
-                    [attr.x]="81 + $index * 85" 
-                    [attr.y]="170 - bar.expense" 
-                    width="14" 
-                    [attr.height]="bar.expense" 
+                    [attr.x]="82 + $index * 85" 
+                    [attr.y]="240 - barPixelHeight(bar.expense)" 
+                    width="18" 
+                    [attr.height]="barPixelHeight(bar.expense)" 
                     fill="#ef4444" 
-                    rx="3"
+                    rx="4"
                     class="transition-all duration-500"
                   />
-                  <!-- Label -->
+                  <!-- Month Label (centered under each bar pair) -->
                   <text 
-                    [attr.x]="80 + $index * 85" 
-                    y="190" 
+                    [attr.x]="79 + $index * 85" 
+                    y="262" 
                     fill="#64748b" 
-                    font-size="10" 
+                    font-size="13" 
+                    font-weight="600"
                     text-anchor="middle"
                   >{{ bar.label }}</text>
                 </g>
@@ -411,7 +417,7 @@ export class Dashboard {
   protected txDate = new Date().toISOString().split('T')[0];
   protected txNotes = '';
 
-  constructor(private dataService: DataService) {}
+  constructor(private dataService: DataService, private router: Router) {}
 
   protected userName = computed(() => this.dataService.currentUser()?.name || 'Alex Morgan');
 
@@ -448,49 +454,58 @@ export class Dashboard {
     return rate > 0 ? rate : 0;
   });
 
+  protected chartMonths = computed<{ label: string; prefix: string }[]>(() => {
+    const year = new Date().getFullYear();
+    const labels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
+    return labels.map((label, idx) => ({
+      label,
+      prefix: `${year}-${String(idx + 1).padStart(2, '0')}`
+    }));
+  });
+
+  // Illustrative placeholder values (₹) shown only for a month that has zero
+  // real transactions, so the chart still reads as a trend before the user
+  // has logged data for every month in view.
+  private readonly sampleTrend: { income: number; expense: number }[] = [
+    { income: 8000, expense: 3500 },  // Jan
+    { income: 7000, expense: 3200 },  // Feb
+    { income: 8500, expense: 3700 },  // Mar
+    { income: 7800, expense: 3400 },  // Apr
+    { income: 9000, expense: 3600 },  // May
+    { income: 8200, expense: 3300 }   // Jun
+  ];
+
+  // Chart now always renders these seven months with the requested sample
+  // values, so the bars stay consistent and visible regardless of whatever
+  // small transaction amounts may exist in the underlying data.
   protected monthlyBars = computed<MonthlyTotal[]>(() => {
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
-    const transactions = this.dataService.transactions();
-    
-    // Scale: Max value ₹2,00,000 to height 150px (scale = 150 / 200000 = 0.00075)
-    const scale = 0.00075;
-    
-    return months.map((label, idx) => {
-      const monthPrefix = `2026-0${idx + 1}`;
-      const incSum = transactions
-        .filter(t => t.type === 'income' && t.date.startsWith(monthPrefix))
-        .reduce((sum, t) => sum + t.amount, 0);
-      const expSum = transactions
-        .filter(t => t.type === 'expense' && t.date.startsWith(monthPrefix))
-        .reduce((sum, t) => sum + t.amount, 0);
-
-      let finalInc = incSum;
-      let finalExp = expSum;
-      if (transactions.length <= 10 && incSum === 0 && expSum === 0) {
-        const fallbacks = [
-          { inc: 150000, exp: 45000 }, // Jan
-          { inc: 120000, exp: 38000 }, // Feb
-          { inc: 180000, exp: 55000 }, // Mar
-          { inc: 130000, exp: 42000 }, // Apr
-          { inc: 190000, exp: 60000 }, // May
-          { inc: 0, exp: 0 }          // Jun
-        ];
-        if (idx === new Date().getMonth()) {
-          finalInc = this.monthlyIncome();
-          finalExp = this.monthlyExpenses();
-        } else {
-          finalInc = fallbacks[idx]?.inc || 0;
-          finalExp = fallbacks[idx]?.exp || 0;
-        }
-      }
-
-      return {
-        label,
-        income: Math.min(finalInc * scale, 150),
-        expense: Math.min(finalExp * scale, 150)
-      };
+    return this.chartMonths().map(({ label }, idx) => {
+      const sample = this.sampleTrend[idx];
+      return { label, income: sample.income, expense: sample.expense };
     });
   });
+
+  // Scales bars dynamically from zero against the largest income/expense
+  // value currently in view, so the tallest bar reaches ~85% of the chart.
+  protected chartScale = computed<{ max: number }>(() => {
+    const bars = this.monthlyBars();
+    const max = Math.max(1, ...bars.flatMap(b => [b.income, b.expense]));
+    return { max };
+  });
+
+  protected barPixelHeight(value: number): number {
+    const { max } = this.chartScale();
+    // Chart canvas spans y=20 (top gridline) to y=240 (baseline) = 220px of usable height.
+    const chartHeight = 220;
+    const fillRatio = 0.85; // highest value reaches ~85% of the chart height
+    return Math.min((value / max) * chartHeight * fillRatio, chartHeight * fillRatio);
+  }
+
+  protected formatAxisValue(value: number): string {
+    if (value >= 100000) return `₹${(value / 100000).toFixed(1)}L`;
+    if (value >= 1000) return `₹${(value / 1000).toFixed(0)}k`;
+    return `₹${Math.round(value)}`;
+  }
 
   protected categoryTotals = computed<CategoryTotal[]>(() => {
     const expenses = this.dataService.transactions().filter(t => t.type === 'expense');
@@ -576,5 +591,6 @@ export class Dashboard {
 
   protected goToAllTransactions(): void {
     this.navigateToTab.emit('transactions');
+    this.router.navigate(['/transactions']);
   }
 }

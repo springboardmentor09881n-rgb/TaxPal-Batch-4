@@ -206,6 +206,21 @@ export class DataService {
     ).subscribe();
   }
 
+  public updateTransaction(id: string, changes: Omit<Transaction, 'id' | 'userId'>): void {
+    const allTx = this.getData<Transaction>('tp_transactions');
+    const index = allTx.findIndex(t => t.id === id);
+    if (index === -1) return;
+
+    const updatedTx: Transaction = { ...allTx[index], ...changes };
+    allTx[index] = updatedTx;
+    this.saveData('tp_transactions', allTx);
+    this.transactions.update(items => items.map(t => (t.id === id ? updatedTx : t)));
+
+    this.http.put<Transaction>(`${this.apiUrl}/transactions/${id}`, updatedTx, { headers: this.getAuthHeaders() }).pipe(
+      catchError(() => of(null))
+    ).subscribe();
+  }
+
   public addBudget(budget: Omit<Budget, 'id' | 'userId'>): void {
     const user = this.currentUser();
     if (!user) return;
