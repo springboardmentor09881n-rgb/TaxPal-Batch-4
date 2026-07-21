@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const authController = require('../controllers/authController');
+const auth = require('../middleware/authMiddleware');
 
 // @route   POST api/auth/register
 // @desc    Register user
@@ -21,5 +22,10 @@ router.post('/forgot-password', authController.forgotPassword);
 // @desc    Reset password using a valid token
 // @access  Public
 router.post('/reset-password', authController.resetPassword);
+
+// @route   PUT api/auth/change-password
+// @desc    Change password for authenticated user
+// @access  Private
+router.put('/change-password', auth, authController.changePassword);
 
 module.exports = router;

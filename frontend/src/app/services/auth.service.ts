@@ -48,6 +48,7 @@ export class AuthService {
   private normalizeUser(user: any): any {
     return {
       ...user,
+      id: user.id || user._id,
       name: user.name || user.fullName || user.username || 'User',
       fullName: user.fullName || user.name || user.username || 'User',
     };

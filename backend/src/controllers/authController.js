@@ -18,14 +18,35 @@ const transporter = nodemailer.createTransport({
 // Helper: send email
 async function sendEmail({ to, subject, html }) {
   try {
+    if (!process.env.SMTP_HOST || !process.env.SMTP_USER) {
+      throw new Error('SMTP credentials are not configured in .env');
+    }
     await transporter.sendMail({
       from: `"TaxPal" <${process.env.SMTP_FROM}>`,
       to,
       subject,
       html,
     });
+    console.log(`Email successfully sent to ${to}: ${subject}`);
   } catch (err) {
     console.error('Email send error:', err.message);
+    console.log('\n--- [DEVELOPMENT/DEBUG EMAIL LOGGER] ---');
+    console.log(`To: ${to}`);
+    console.log(`Subject: ${subject}`);
+    // Clean html to print readable text
+    const cleanText = html
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    console.log(`Content Summary: ${cleanText.substring(0, 200)}...`);
+    
+    // Extract and explicitly print any href link for easy developer clicking
+    const linkMatch = html.match(/href="([^"]+)"/);
+    if (linkMatch && linkMatch[1]) {
+      console.log(`Extracted Link: ${linkMatch[1]}`);
+    }
+    console.log('----------------------------------------\n');
   }
 }
 
@@ -211,5 +232,36 @@ exports.resetPassword = async (req, res) => {
   } catch (error) {
     console.error('Reset password error:', error);
     res.status(500).json({ message: 'Server error. Please try again.' });
+  }
+};
+
+// Change Password – validate current password and update password
+exports.changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ message: 'Current and new password are required.' });
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+
+    // Compare with current password
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ message: 'Incorrect current password.' });
+    }
+
+    // Hash the new password
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(newPassword, salt);
+    await user.save();
+
+    res.status(200).json({ message: 'Password has been updated successfully.' });
+  } catch (error) {
+    console.error('Change password error:', error);
+    res.status(500).json({ message: 'Server error during password update.' });
   }
 };

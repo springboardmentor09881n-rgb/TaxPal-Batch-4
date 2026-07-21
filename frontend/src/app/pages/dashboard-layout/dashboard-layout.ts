@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { Sidebar, TabName } from '../../components/sidebar/sidebar';
 import { Router } from '@angular/router';
@@ -18,10 +18,17 @@ import { Router } from '@angular/router';
     </div>
   `
 })
-export class DashboardLayoutComponent {
+export class DashboardLayoutComponent implements OnInit {
   activeTab: TabName = 'dashboard';
 
   constructor(private router: Router) {}
+
+  ngOnInit(): void {
+    const currentPath = this.router.url.split('/')[1] as TabName;
+    if (['dashboard', 'transactions', 'budgets', 'tax-estimator', 'reports', 'settings'].includes(currentPath)) {
+      this.activeTab = currentPath;
+    }
+  }
 
   onTabChange(tab: TabName): void {
     this.activeTab = tab;

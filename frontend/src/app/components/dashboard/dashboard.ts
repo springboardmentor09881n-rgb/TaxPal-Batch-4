@@ -419,6 +419,10 @@ export class Dashboard {
 
   protected userName = computed(() => this.dataService.currentUser()?.name || 'Alex Morgan');
 
+  protected barPixelHeight(val: number): number {
+    return Math.min(220, (val / 10000) * 220) || 0;
+  }
+
   protected recentTransactions = computed(() => {
     return this.dataService.transactions().slice(0, 3);
   });

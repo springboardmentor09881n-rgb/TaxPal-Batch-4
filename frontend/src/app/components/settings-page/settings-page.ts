@@ -381,12 +381,19 @@ export class SettingsPage {
     const original = this.dataService.categories().find(c => c.id === id);
     if (!original) return;
 
+    const oldName = original.name;
+    const newName = this.editName.trim();
+
     this.dataService.deleteCategory(id);
     this.dataService.addCategory({
       type: original.type,
-      name: this.editName.trim(),
+      name: newName,
       color: this.editColor
     });
+
+    if (oldName !== newName) {
+      this.dataService.renameCategoryCascade(oldName, newName, original.type);
+    }
 
     this.editingCategoryId.set(null);
   }
@@ -432,7 +439,7 @@ export class SettingsPage {
   }
 
   // --- Security ---
-  protected changePassword(event: Event): void {
+  protected async changePassword(event: Event): Promise<void> {
     event.preventDefault();
     this.securityError.set('');
     this.securitySuccess.set(false);
@@ -450,10 +457,19 @@ export class SettingsPage {
       return;
     }
 
-    this.securitySuccess.set(true);
-    this.currentPassword = '';
-    this.newPassword = '';
-    this.confirmPassword = '';
-    setTimeout(() => this.securitySuccess.set(false), 2500);
+    try {
+      const res = await this.dataService.changePassword(this.currentPassword, this.newPassword);
+      if (res.success) {
+        this.securitySuccess.set(true);
+        this.currentPassword = '';
+        this.newPassword = '';
+        this.confirmPassword = '';
+        setTimeout(() => this.securitySuccess.set(false), 2500);
+      } else {
+        this.securityError.set(res.message);
+      }
+    } catch (err: any) {
+      this.securityError.set(err.message || 'An error occurred. Please try again.');
+    }
   }
 }

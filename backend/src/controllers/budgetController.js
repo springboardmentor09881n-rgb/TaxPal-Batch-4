@@ -18,9 +18,19 @@ exports.getBudgets = async (req, res) => {
       // For a more robust solution, we can just aggregate all expenses for the category
       // that fall in the same month.
       try {
-         const budgetMonthDate = new Date(budget.month);
-         const startOfMonth = new Date(budgetMonthDate.getFullYear(), budgetMonthDate.getMonth(), 1);
-         const endOfMonth = new Date(budgetMonthDate.getFullYear(), budgetMonthDate.getMonth() + 1, 0, 23, 59, 59);
+         let year, month;
+         if (budget.month.includes('-')) {
+           const parts = budget.month.split('-');
+           year = parseInt(parts[0], 10);
+           month = parseInt(parts[1], 10) - 1; // 0-indexed
+         } else {
+           const tempDate = new Date(budget.month);
+           year = tempDate.getFullYear();
+           month = tempDate.getMonth();
+         }
+
+         const startOfMonth = new Date(year, month, 1, 0, 0, 0, 0);
+         const endOfMonth = new Date(year, month + 1, 0, 23, 59, 59, 999);
 
          const transactions = await Transaction.find({
             userId: req.user.id,

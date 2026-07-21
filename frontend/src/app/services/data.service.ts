@@ -44,6 +44,7 @@ export class DataService {
     const sessionUser = sessionStorage.getItem('tp_active_user');
     if (sessionUser) {
       const parsedUser = JSON.parse(sessionUser) as User;
+      parsedUser.id = parsedUser.id || (parsedUser as any)._id;
       this.currentUser.set(parsedUser);
       this.loadUserData(parsedUser.id);
     }
@@ -63,6 +64,7 @@ export class DataService {
     this.categories.set(allCategories.filter(c => c.userId === userId));
 
     this.loadTransactionsFromServer();
+    this.loadBudgetsFromServer();
   }
 
   private getData<T>(key: string): T[] {
@@ -91,7 +93,9 @@ export class DataService {
         // Normalize: backend returns fullName, frontend expects name
         const normalizedUser = {
           ...response.user,
+          id: response.user.id || response.user._id,
           name: response.user.name || response.user.fullName || response.user.username,
+          token: response.token,
         };
         sessionStorage.setItem('tp_token', response.token);
         sessionStorage.setItem('tp_active_user', JSON.stringify(normalizedUser));
@@ -193,6 +197,26 @@ export class DataService {
     }
   }
 
+  public async changePassword(currentPassword: string, newPassword: string): Promise<{ success: boolean; message: string }> {
+    try {
+      const response = await firstValueFrom(
+        this.http.put<{ message: string }>(
+          `${this.apiUrl}/auth/change-password`,
+          { currentPassword, newPassword },
+          { headers: this.getAuthHeaders() }
+        ).pipe(
+          catchError((err) => of({ message: err?.error?.message || 'Password update failed.', __error: true } as any))
+        )
+      );
+      if ((response as any).__error) {
+        return { success: false, message: response.message };
+      }
+      return { success: true, message: response.message };
+    } catch {
+      return { success: false, message: 'Unable to connect. Please try again.' };
+    }
+  }
+
   public logout(): void {
     sessionStorage.removeItem('tp_token');
     sessionStorage.removeItem('tp_active_user');
@@ -209,7 +233,35 @@ export class DataService {
 
     this.http.get<Transaction[]>(`${this.apiUrl}/transactions`, { headers: this.getAuthHeaders() }).pipe(
       catchError(() => of(this.getData<Transaction>('tp_transactions').filter(tx => tx.userId === user.id)))
-    ).subscribe(data => this.transactions.set(data));
+    ).subscribe(data => {
+      const mapped = data.map(tx => ({
+        ...tx,
+        id: tx.id || (tx as any)._id
+      }));
+      this.transactions.set(mapped);
+    });
+  }
+
+  private loadBudgetsFromServer(): void {
+    const user = this.currentUser();
+    if (!user) return;
+
+    this.http.get<any[]>(`${this.apiUrl}/budgets`, { headers: this.getAuthHeaders() }).pipe(
+      catchError(() => {
+        const userId = user.id || (user as any)._id;
+        return of(this.getData<Budget>('tp_budgets').filter(b => b.userId === userId));
+      })
+    ).subscribe(data => {
+      const mapped: Budget[] = data.map(b => ({
+        id: b._id || b.id,
+        userId: b.userId,
+        category: b.category,
+        limit: b.budget_amount !== undefined ? b.budget_amount : (b.limit || 0),
+        month: b.month,
+        description: b.description
+      }));
+      this.budgets.set(mapped);
+    });
   }
 
   public addTransaction(tx: Omit<Transaction, 'id' | 'userId'>): void {
@@ -219,7 +271,7 @@ export class DataService {
     const newTx: Transaction = {
       ...tx,
       id: 'tx_' + Date.now(),
-      userId: user.id
+      userId: user.id || (user as any)._id
     };
 
     const allTx = this.getData<Transaction>('tp_transactions');
@@ -227,16 +279,31 @@ export class DataService {
     this.saveData('tp_transactions', allTx);
     this.transactions.update(items => [newTx, ...items]);
 
-    this.http.post<Transaction>(`${this.apiUrl}/transactions`, newTx, { headers: this.getAuthHeaders() }).pipe(
+    this.http.post<any>(`${this.apiUrl}/transactions`, newTx, { headers: this.getAuthHeaders() }).pipe(
       catchError(() => of(null))
-    ).subscribe();
+    ).subscribe(res => {
+      if (res) {
+        const serverId = res._id || res.id;
+        // Update local signal state ID
+        this.transactions.update(items =>
+          items.map(t => t.id === newTx.id ? { ...t, id: serverId } : t)
+        );
+        // Update localStorage ID
+        const currentAll = this.getData<Transaction>('tp_transactions');
+        const idx = currentAll.findIndex(t => t.id === newTx.id);
+        if (idx !== -1) {
+          currentAll[idx].id = serverId;
+          this.saveData('tp_transactions', currentAll);
+        }
+      }
+    });
   }
 
   public deleteTransaction(id: string): void {
     const allTx = this.getData<Transaction>('tp_transactions');
-    const filtered = allTx.filter(t => t.id !== id);
+    const filtered = allTx.filter(t => t.id !== id && (t as any)._id !== id);
     this.saveData('tp_transactions', filtered);
-    this.transactions.update(items => items.filter(t => t.id !== id));
+    this.transactions.update(items => items.filter(t => t.id !== id && (t as any)._id !== id));
 
     this.http.delete(`${this.apiUrl}/transactions/${id}`, { headers: this.getAuthHeaders() }).pipe(
       catchError(() => of(null))
@@ -265,7 +332,7 @@ export class DataService {
     const newBudget: Budget = {
       ...budget,
       id: 'bgt_' + Date.now(),
-      userId: user.id
+      userId: user.id || (user as any)._id
     };
 
     const allBudgets = this.getData<Budget>('tp_budgets');
@@ -273,6 +340,30 @@ export class DataService {
     this.saveData('tp_budgets', allBudgets);
 
     this.budgets.update(items => [...items, newBudget]);
+
+    const backendPayload = {
+      category: budget.category,
+      budget_amount: budget.limit,
+      month: budget.month,
+      description: budget.description
+    };
+
+    this.http.post<any>(`${this.apiUrl}/budgets`, backendPayload, { headers: this.getAuthHeaders() }).pipe(
+      catchError(() => of(null))
+    ).subscribe(res => {
+      if (res) {
+        const serverId = res._id || res.id;
+        this.budgets.update(items =>
+          items.map(b => b.id === newBudget.id ? { ...b, id: serverId } : b)
+        );
+        const currentAll = this.getData<Budget>('tp_budgets');
+        const idx = currentAll.findIndex(b => b.id === newBudget.id);
+        if (idx !== -1) {
+          currentAll[idx].id = serverId;
+          this.saveData('tp_budgets', currentAll);
+        }
+      }
+    });
   }
 
   public deleteBudget(id: string): void {
@@ -281,6 +372,60 @@ export class DataService {
     this.saveData('tp_budgets', filtered);
 
     this.budgets.update(items => items.filter(b => b.id !== id));
+
+    this.http.delete(`${this.apiUrl}/budgets/${id}`, { headers: this.getAuthHeaders() }).pipe(
+      catchError(() => of(null))
+    ).subscribe();
+  }
+
+  public updateBudget(id: string, changes: Omit<Budget, 'id' | 'userId'>): void {
+    const allBudgets = this.getData<Budget>('tp_budgets');
+    const index = allBudgets.findIndex(b => b.id === id);
+    if (index === -1) return;
+
+    const updatedBudget: Budget = { ...allBudgets[index], ...changes };
+    allBudgets[index] = updatedBudget;
+    this.saveData('tp_budgets', allBudgets);
+    this.budgets.update(items => items.map(b => (b.id === id ? updatedBudget : b)));
+
+    const backendPayload = {
+      category: changes.category,
+      budget_amount: changes.limit,
+      month: changes.month,
+      description: changes.description
+    };
+
+    this.http.put<any>(`${this.apiUrl}/budgets/${id}`, backendPayload, { headers: this.getAuthHeaders() }).pipe(
+      catchError(() => of(null))
+    ).subscribe();
+  }
+
+  public renameCategoryCascade(oldName: string, newName: string, type: 'income' | 'expense'): void {
+    // 1. Cascade rename in transactions
+    const txsToUpdate = this.transactions().filter(t => t.category === oldName && t.type === type);
+    txsToUpdate.forEach(t => {
+      this.updateTransaction(t.id, {
+        type: t.type,
+        description: t.description,
+        category: newName,
+        amount: t.amount,
+        date: t.date,
+        notes: t.notes
+      });
+    });
+
+    // 2. Cascade rename in budgets (expenses only)
+    if (type === 'expense') {
+      const budgetsToUpdate = this.budgets().filter(b => b.category === oldName);
+      budgetsToUpdate.forEach(b => {
+        this.updateBudget(b.id, {
+          category: newName,
+          limit: b.limit,
+          month: b.month,
+          description: b.description
+        });
+      });
+    }
   }
 
   public addCategory(cat: Omit<Category, 'id' | 'userId'>): void {
