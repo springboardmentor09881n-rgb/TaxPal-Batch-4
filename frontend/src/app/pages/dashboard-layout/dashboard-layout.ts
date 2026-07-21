@@ -21,7 +21,24 @@ import { Router } from '@angular/router';
 export class DashboardLayoutComponent {
   activeTab: TabName = 'dashboard';
 
-  constructor(private router: Router) {}
+  constructor(private router: Router) {
+    this.router.events.subscribe(() => {
+      const url = this.router.url;
+      if (url.includes('/transactions')) {
+        this.activeTab = 'transactions';
+      } else if (url.includes('/budgets')) {
+        this.activeTab = 'budgets';
+      } else if (url.includes('/tax-estimator')) {
+        this.activeTab = 'tax-estimator';
+      } else if (url.includes('/reports')) {
+        this.activeTab = 'reports';
+      } else if (url.includes('/settings')) {
+        this.activeTab = 'settings';
+      } else {
+        this.activeTab = 'dashboard';
+      }
+    });
+  }
 
   onTabChange(tab: TabName): void {
     this.activeTab = tab;

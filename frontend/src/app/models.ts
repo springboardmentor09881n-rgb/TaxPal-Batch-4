@@ -20,12 +20,15 @@ export interface Transaction {
 }
 
 export interface Budget {
-  id: string;
+  _id?: string;
+  id?: string;
   userId: string;
   category: string;
-  limit: number;
+  budget_amount: number;
   month: string;
   description?: string;
+  spent?: number;
+  remaining?: number;
 }
 
 export interface Report {
@@ -39,7 +42,8 @@ export interface Report {
 }
 
 export interface Category {
-  id: string;
+  _id?: string;
+  id?: string;
   userId: string;
   type: 'income' | 'expense';
   name: string;

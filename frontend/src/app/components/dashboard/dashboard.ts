@@ -1,6 +1,7 @@
-import { Component, signal, computed, output } from '@angular/core';
+import { Component, signal, computed, output, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DataService } from '../../services/data.service';
+import { CategoryService } from '../../services/category.service';
 import { Category } from '../../models';
 
 interface MonthlyTotal {
@@ -356,7 +357,7 @@ interface CategoryTotal {
                   class="w-full px-4 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="" disabled>Select a category</option>
-                  @for (cat of getCategoriesForType(); track cat.id || $index) {
+                  @for (cat of categoriesForType(); track $index) {
                     <option [value]="cat.name">{{ cat.name }}</option>
                   }
                 </select>
@@ -398,7 +399,7 @@ interface CategoryTotal {
     </div>
   `
 })
-export class Dashboard {
+export class Dashboard implements OnInit {
   public readonly navigateToTab = output<'transactions' | 'settings'>();
 
   protected readonly activeModalType = signal<'income' | 'expense' | null>(null);
@@ -409,7 +410,13 @@ export class Dashboard {
   protected txDate = new Date().toISOString().split('T')[0];
   protected txNotes = '';
 
+  private categoryService = inject(CategoryService);
+
   constructor(private dataService: DataService) {}
+
+  ngOnInit(): void {
+    this.categoryService.loadCategories();
+  }
 
   protected userName = computed(() => this.dataService.currentUser()?.name || 'Alex Morgan');
 
@@ -558,9 +565,14 @@ export class Dashboard {
     return match ? match.color : '#64748b';
   }
 
-  protected getCategoriesForType(): Category[] {
-    return this.dataService.categories().filter(c => c.type === this.activeModalType());
-  }
+  protected categoriesForType = computed(() => {
+    const type = this.activeModalType();
+    if (!type) return [];
+    // Prefer backend categories (CategoryService), fallback to localStorage
+    const backendCats = this.categoryService.categories().filter(c => c.type === type);
+    if (backendCats.length > 0) return backendCats;
+    return this.dataService.categories().filter(c => c.type === type);
+  });
 
   protected openModal(type: 'income' | 'expense'): void {
     this.activeModalType.set(type);

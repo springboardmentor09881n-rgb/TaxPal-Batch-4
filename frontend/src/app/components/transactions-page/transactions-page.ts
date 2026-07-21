@@ -1,6 +1,7 @@
-import { Component, computed, signal } from '@angular/core';
+import { Component, computed, signal, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DataService } from '../../services/data.service';
+import { CategoryService } from '../../services/category.service';
 import { Category } from '../../models';
 
 @Component({
@@ -257,7 +258,7 @@ import { Category } from '../../models';
                 class="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="" disabled>Select a category</option>
-                @for (cat of getCategoriesForType(); track cat.id) {
+                @for (cat of categoriesForType(); track ($index)) {
                   <option [value]="cat.name">{{ cat.name }}</option>
                 }
               </select>
@@ -297,7 +298,7 @@ import { Category } from '../../models';
     }
   `
 })
-export class TransactionsPageComponent {
+export class TransactionsPageComponent implements OnInit {
   protected searchQuery = '';
   protected typeFilter: 'all' | 'income' | 'expense' = 'all';
 
@@ -308,7 +309,13 @@ export class TransactionsPageComponent {
   protected txDate = new Date().toISOString().split('T')[0];
   protected txNotes = '';
 
+  private categoryService = inject(CategoryService);
+
   constructor(private dataService: DataService) {}
+
+  ngOnInit(): void {
+    this.categoryService.loadCategories();
+  }
 
   protected totalIncome = computed(() =>
     this.dataService.transactions()
@@ -346,14 +353,24 @@ export class TransactionsPageComponent {
   }
 
   protected getCategoryColor(catName: string, type: 'income' | 'expense'): string {
-    const cats = this.dataService.categories();
-    const match = cats.find(c => c.name === catName && c.type === type);
+    // Check backend categories first, then localStorage
+    const allCats = [
+      ...this.categoryService.categories(),
+      ...this.dataService.categories()
+    ];
+    const match = allCats.find(c => c.name === catName && c.type === type);
     return match ? match.color : (type === 'income' ? '#10b981' : '#ef4444');
   }
 
-  protected getCategoriesForType(): Category[] {
-    return this.dataService.categories().filter(c => c.type === this.activeModalType());
-  }
+  protected categoriesForType = computed(() => {
+    const type = this.activeModalType();
+    if (!type) return [];
+    // Prefer backend categories (from CategoryService)
+    const backendCats = this.categoryService.categories().filter(c => c.type === type);
+    if (backendCats.length > 0) return backendCats;
+    // Fallback to localStorage categories (DataService)
+    return this.dataService.categories().filter(c => c.type === type);
+  });
 
   protected openModal(type: 'income' | 'expense'): void {
     this.activeModalType.set(type);

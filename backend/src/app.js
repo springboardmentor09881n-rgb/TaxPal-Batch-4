@@ -6,6 +6,7 @@ const app = express();
 const authRoutes = require('./routes/auth');
 const transactionRoutes = require('./routes/transactions');
 const budgetRoutes = require('./routes/budgets');
+const categoryRoutes = require('./routes/categories');
 
 // Middleware
 app.use(cors());
@@ -15,5 +16,6 @@ app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/budgets', budgetRoutes);
+app.use('/api/categories', categoryRoutes);
 
 module.exports = app;
