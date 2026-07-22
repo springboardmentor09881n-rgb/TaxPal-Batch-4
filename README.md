@@ -20,8 +20,8 @@
 
 This repository is organized into two main directories:
 
-- [`/frontend-sreshta`](./frontend-sreshta/) - Contains the Angular client application.
-- [`/backend-sreshta`](./backend-sreshta/) - Contains the Node.js/Express REST API.
+- [`/frontend`](./frontend/) - Contains the Angular client application.
+- [`/backend`](./backend/) - Contains the Node.js/Express REST API.
 
 ---
 
@@ -30,17 +30,17 @@ This repository is organized into two main directories:
 To run the project locally, you will need to start both the backend server and the frontend client. 
 
 ### 1. Start the Backend
-For detailed instructions, see the [Backend README](./backend-sreshta/README.md).
+For detailed instructions, see the [Backend README](./backend/README.md).
 ```bash
-cd backend-sreshta
+cd backend
 npm install
 npm run dev
 ```
 
 ### 2. Start the Frontend
-For detailed instructions, see the [Frontend README](./frontend-sreshta/README.md).
+For detailed instructions, see the [Frontend README](./frontend/README.md).
 ```bash
-cd frontend-sreshta
+cd frontend
 npm install
 npm start
 ```
