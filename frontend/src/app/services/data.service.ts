@@ -545,11 +545,11 @@ export class DataService {
     const currentMonth = new Date().toISOString().slice(0, 7);
 
     const defaults: Omit<Budget, 'id' | 'userId'>[] = [
-      { category: 'Office Rent', limit: 25000.00, month: currentMonth, description: 'Mumbai hotdesk' },
-      { category: 'Business Expenses', limit: 20000.00, month: currentMonth, description: 'Server and advertising allotments' },
-      { category: 'Software Subscriptions', limit: 8000.00, month: currentMonth },
-      { category: 'Utilities', limit: 5000.00, month: currentMonth },
-      { category: 'Meals & Entertainment', limit: 10000.00, month: currentMonth }
+      { category: 'Office Rent', budget_amount: 25000.00, month: currentMonth, description: 'Mumbai hotdesk' },
+      { category: 'Business Expenses', budget_amount: 20000.00, month: currentMonth, description: 'Server and advertising allotments' },
+      { category: 'Software Subscriptions', budget_amount: 8000.00, month: currentMonth },
+      { category: 'Utilities', budget_amount: 5000.00, month: currentMonth },
+      { category: 'Meals & Entertainment', budget_amount: 10000.00, month: currentMonth }
     ];
 
     const allBudgets = this.getData<Budget>('tp_budgets');
