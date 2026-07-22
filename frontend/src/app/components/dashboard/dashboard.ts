@@ -416,13 +416,9 @@ export class Dashboard implements OnInit {
   protected txDate = new Date().toISOString().split('T')[0];
   protected txNotes = '';
 
-<<<<<<< HEAD
-  constructor(private dataService: DataService, private router: Router) {}
-=======
   private categoryService = inject(CategoryService);
 
-  constructor(private dataService: DataService) {}
->>>>>>> Riyaz
+  constructor(private dataService: DataService, private router: Router) {}
 
   ngOnInit(): void {
     this.categoryService.loadCategories();
@@ -569,10 +565,7 @@ export class Dashboard implements OnInit {
   protected categoriesForType = computed(() => {
     const type = this.activeModalType();
     if (!type) return [];
-    // Prefer backend categories (CategoryService), fallback to localStorage
-    const backendCats = this.categoryService.categories().filter(c => c.type === type);
-    if (backendCats.length > 0) return backendCats;
-    return this.dataService.categories().filter(c => c.type === type);
+    return this.categoryService.mergedCategories(type);
   });
 
   protected openModal(type: 'income' | 'expense'): void {

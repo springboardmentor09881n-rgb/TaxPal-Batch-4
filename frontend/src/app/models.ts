@@ -44,7 +44,7 @@ export interface Report {
 export interface Category {
   _id?: string;
   id?: string;
-  userId: string;
+  userId?: string;
   type: 'income' | 'expense';
   name: string;
   color: string;

@@ -24,7 +24,10 @@ export class BudgetService {
     return this.http.post<Budget>(`${environment.apiUrl}/budgets`, budget).pipe(
       tap((newBudget) => {
         const current = this.budgets();
-        this.budgets.set([newBudget, ...current]);
+        const spent = newBudget.spent || 0;
+        const remaining = newBudget.remaining !== undefined ? newBudget.remaining : ((newBudget.budget_amount || 0) - spent);
+        const formatted = { ...newBudget, spent, remaining };
+        this.budgets.set([formatted, ...current]);
       })
     );
   }
@@ -32,7 +35,17 @@ export class BudgetService {
   updateBudget(id: string, budget: any): Observable<Budget> {
     return this.http.put<Budget>(`${environment.apiUrl}/budgets/${id}`, budget).pipe(
       tap((updatedBudget) => {
-        const current = this.budgets().map(b => b._id === id || b.id === id ? { ...b, ...updatedBudget } : b);
+        const current = this.budgets().map(b => {
+          if (b._id === id || b.id === id) {
+            const merged = { ...b, ...updatedBudget };
+            const spent = merged.spent !== undefined ? merged.spent : (b.spent || 0);
+            const budget_amount = merged.budget_amount !== undefined ? merged.budget_amount : (b.budget_amount || 0);
+            merged.spent = spent;
+            merged.remaining = budget_amount - spent;
+            return merged;
+          }
+          return b;
+        });
         this.budgets.set(current);
       })
     );

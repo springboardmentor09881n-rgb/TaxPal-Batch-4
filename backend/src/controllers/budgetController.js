@@ -1,55 +1,48 @@
 const Budget = require('../models/budgets.model');
 const Transaction = require('../models/Transaction.model');
 
+// Helper to calculate spent and remaining for a budget document
+async function formatBudgetWithSpent(budgetDoc, userId) {
+  const budgetObj = budgetDoc.toObject ? budgetDoc.toObject() : { ...budgetDoc };
+  try {
+    let year, month;
+    if (budgetObj.month.includes('-')) {
+      const parts = budgetObj.month.split('-');
+      year = parseInt(parts[0], 10);
+      month = parseInt(parts[1], 10) - 1; // 0-indexed
+    } else {
+      const tempDate = new Date(budgetObj.month);
+      year = tempDate.getFullYear();
+      month = tempDate.getMonth();
+    }
+
+    const startOfMonth = new Date(year, month, 1, 0, 0, 0, 0);
+    const endOfMonth = new Date(year, month + 1, 0, 23, 59, 59, 999);
+
+    const transactions = await Transaction.find({
+      userId: userId,
+      category: budgetObj.category,
+      type: 'expense',
+      date: { $gte: startOfMonth, $lte: endOfMonth }
+    });
+
+    const spent = transactions.reduce((acc, curr) => acc + curr.amount, 0);
+    budgetObj.spent = spent;
+    budgetObj.remaining = budgetObj.budget_amount - spent;
+  } catch (err) {
+    budgetObj.spent = 0;
+    budgetObj.remaining = budgetObj.budget_amount;
+  }
+  return budgetObj;
+}
+
 // @desc    Get all budgets for a user
 // @route   GET /api/budgets
 // @access  Private
 exports.getBudgets = async (req, res) => {
   try {
     const budgets = await Budget.find({ userId: req.user.id });
-    
-    // Calculate spent amount for each budget
-    const budgetsWithSpent = await Promise.all(budgets.map(async (budget) => {
-      const budgetObj = budget.toObject();
-      
-      // Attempt to calculate spent amount from transactions
-      // Assuming budget.month format is like "May, 2025" or similar parseable date,
-      // or frontend sends it in a consistent format. 
-      // For a more robust solution, we can just aggregate all expenses for the category
-      // that fall in the same month.
-      try {
-         let year, month;
-         if (budget.month.includes('-')) {
-           const parts = budget.month.split('-');
-           year = parseInt(parts[0], 10);
-           month = parseInt(parts[1], 10) - 1; // 0-indexed
-         } else {
-           const tempDate = new Date(budget.month);
-           year = tempDate.getFullYear();
-           month = tempDate.getMonth();
-         }
-
-         const startOfMonth = new Date(year, month, 1, 0, 0, 0, 0);
-         const endOfMonth = new Date(year, month + 1, 0, 23, 59, 59, 999);
-
-         const transactions = await Transaction.find({
-            userId: req.user.id,
-            category: budget.category,
-            type: 'expense',
-            date: { $gte: startOfMonth, $lte: endOfMonth }
-         });
-
-         const spent = transactions.reduce((acc, curr) => acc + curr.amount, 0);
-         budgetObj.spent = spent;
-         budgetObj.remaining = budgetObj.budget_amount - spent;
-      } catch (err) {
-         budgetObj.spent = 0;
-         budgetObj.remaining = budgetObj.budget_amount;
-      }
-
-      return budgetObj;
-    }));
-
+    const budgetsWithSpent = await Promise.all(budgets.map(b => formatBudgetWithSpent(b, req.user.id)));
     res.status(200).json(budgetsWithSpent);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching budgets', error: error.message });
@@ -77,7 +70,8 @@ exports.createBudget = async (req, res) => {
     });
 
     const savedBudget = await budget.save();
-    res.status(201).json(savedBudget);
+    const formatted = await formatBudgetWithSpent(savedBudget, req.user.id);
+    res.status(201).json(formatted);
   } catch (error) {
     res.status(500).json({ message: 'Error creating budget', error: error.message });
   }
@@ -97,12 +91,13 @@ exports.updateBudget = async (req, res) => {
     }
 
     budget.category = category || budget.category;
-    budget.budget_amount = budget_amount || budget.budget_amount;
+    budget.budget_amount = budget_amount !== undefined ? budget_amount : budget.budget_amount;
     budget.month = month || budget.month;
     budget.description = description !== undefined ? description : budget.description;
 
     const updatedBudget = await budget.save();
-    res.status(200).json(updatedBudget);
+    const formatted = await formatBudgetWithSpent(updatedBudget, req.user.id);
+    res.status(200).json(formatted);
   } catch (error) {
     res.status(500).json({ message: 'Error updating budget', error: error.message });
   }

@@ -65,6 +65,7 @@ export class DataService {
 
     this.loadTransactionsFromServer();
     this.loadBudgetsFromServer();
+    this.loadCategoriesFromServer();
   }
 
   private getData<T>(key: string): T[] {
@@ -256,11 +257,26 @@ export class DataService {
         id: b._id || b.id,
         userId: b.userId,
         category: b.category,
-        limit: b.budget_amount !== undefined ? b.budget_amount : (b.limit || 0),
+        budget_amount: b.budget_amount !== undefined ? b.budget_amount : (b.limit || 0),
         month: b.month,
         description: b.description
       }));
       this.budgets.set(mapped);
+    });
+  }
+
+  private loadCategoriesFromServer(): void {
+    const user = this.currentUser();
+    if (!user) return;
+
+    this.http.get<Category[]>(`${this.apiUrl}/categories`, { headers: this.getAuthHeaders() }).pipe(
+      catchError(() => of(this.getData<Category>('tp_categories').filter(c => c.userId === user.id)))
+    ).subscribe(data => {
+      const mapped = data.map(c => ({
+        ...c,
+        id: c.id || (c as any)._id
+      }));
+      this.categories.set(mapped);
     });
   }
 
@@ -343,7 +359,7 @@ export class DataService {
 
     const backendPayload = {
       category: budget.category,
-      budget_amount: budget.limit,
+      budget_amount: budget.budget_amount,
       month: budget.month,
       description: budget.description
     };
@@ -383,14 +399,17 @@ export class DataService {
     const index = allBudgets.findIndex(b => b.id === id);
     if (index === -1) return;
 
-    const updatedBudget: Budget = { ...allBudgets[index], ...changes };
+    const oldBudget = allBudgets[index];
+    const spent = oldBudget.spent || 0;
+    const remaining = (changes.budget_amount !== undefined ? changes.budget_amount : (oldBudget.budget_amount || 0)) - spent;
+    const updatedBudget: Budget = { ...oldBudget, ...changes, spent, remaining };
     allBudgets[index] = updatedBudget;
     this.saveData('tp_budgets', allBudgets);
-    this.budgets.update(items => items.map(b => (b.id === id ? updatedBudget : b)));
+    this.budgets.update(items => items.map(b => (b.id === id || b._id === id ? updatedBudget : b)));
 
     const backendPayload = {
       category: changes.category,
-      budget_amount: changes.limit,
+      budget_amount: changes.budget_amount,
       month: changes.month,
       description: changes.description
     };
@@ -418,12 +437,15 @@ export class DataService {
     if (type === 'expense') {
       const budgetsToUpdate = this.budgets().filter(b => b.category === oldName);
       budgetsToUpdate.forEach(b => {
-        this.updateBudget(b.id, {
-          category: newName,
-          limit: b.limit,
-          month: b.month,
-          description: b.description
-        });
+        const targetId = b.id || b._id;
+        if (targetId) {
+          this.updateBudget(targetId, {
+            category: newName,
+            budget_amount: b.budget_amount,
+            month: b.month,
+            description: b.description
+          });
+        }
       });
     }
   }
@@ -435,7 +457,7 @@ export class DataService {
     const newCat: Category = {
       ...cat,
       id: 'cat_' + Date.now(),
-      userId: user.id
+      userId: user.id || (user as any)._id
     };
 
     const allCats = this.getData<Category>('tp_categories');
@@ -443,14 +465,36 @@ export class DataService {
     this.saveData('tp_categories', allCats);
 
     this.categories.update(items => [...items, newCat]);
+
+    this.http.post<any>(`${this.apiUrl}/categories`, cat, { headers: this.getAuthHeaders() }).pipe(
+      catchError(() => of(null))
+    ).subscribe(res => {
+      if (res) {
+        const serverId = res._id || res.id;
+        this.categories.update(items =>
+          items.map(c => c.id === newCat.id ? { ...c, id: serverId, _id: serverId } : c)
+        );
+        const currentAll = this.getData<Category>('tp_categories');
+        const idx = currentAll.findIndex(c => c.id === newCat.id);
+        if (idx !== -1) {
+          currentAll[idx].id = serverId;
+          currentAll[idx]._id = serverId;
+          this.saveData('tp_categories', currentAll);
+        }
+      }
+    });
   }
 
   public deleteCategory(id: string): void {
     const allCats = this.getData<Category>('tp_categories');
-    const filtered = allCats.filter(c => c.id !== id);
+    const filtered = allCats.filter(c => c.id !== id && (c as any)._id !== id);
     this.saveData('tp_categories', filtered);
 
-    this.categories.update(items => items.filter(c => c.id !== id));
+    this.categories.update(items => items.filter(c => c.id !== id && (c as any)._id !== id));
+
+    this.http.delete(`${this.apiUrl}/categories/${id}`, { headers: this.getAuthHeaders() }).pipe(
+      catchError(() => of(null))
+    ).subscribe();
   }
 
   public generateReport(reportType: string, period: string, format: 'PDF' | 'CSV'): void {
