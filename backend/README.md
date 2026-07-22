@@ -24,34 +24,13 @@ npm install
 ```
 
 ### 4. Environment Variables
-Create a `.env` file in the root of the `backend` directory and fill in your own values:
+Create a `.env` file in the root of the `backend` directory and add the following configuration:
 ```env
-PORT=
-JWT_SECRET=
-MONGODB_URI=
-DB_NAME=
-DB_HOST=
-SMTP_HOST=
-SMTP_PORT=
-SMTP_USER=
-SMTP_PASSWORD=
-FRONTEND_URL=
+PORT=5000
+JWT_SECRET=supersecretjwtkeyforlocaldev123
+MONGODB_URI=mongodb://localhost:27017/taxpal
 ```
-
-| Variable | Description |
-|---|---|
-| `PORT` | Port the backend server runs on (e.g. `5000`) |
-| `JWT_SECRET` | Secret key used to sign and verify JWT tokens |
-| `MONGODB_URI` | MongoDB connection string (local or Atlas) |
-| `DB_NAME` | Name of the MongoDB database |
-| `DB_HOST` | MongoDB host (e.g. `localhost`) |
-| `SMTP_HOST` | SMTP server host for sending emails (e.g. `smtp.gmail.com`) |
-| `SMTP_PORT` | SMTP port (e.g. `587` for TLS) |
-| `SMTP_USER` | Email address used to send emails |
-| `SMTP_PASSWORD` | App password for the SMTP email account |
-| `FRONTEND_URL` | Base URL of the frontend app (e.g. `http://localhost:4200`) |
-
-*(If using MongoDB Atlas, set `MONGODB_URI` to your Atlas connection string).*
+*(If using MongoDB Atlas, replace `MONGODB_URI` with your connection string).*
 
 ### 5. Run the Server
 Start the development server:

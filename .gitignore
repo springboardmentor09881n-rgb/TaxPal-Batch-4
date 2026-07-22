@@ -1,7 +1,0 @@
-node_modules/
-backend-riyaz/
-.env
-.env.local
-.DS_Store
-dist/
-tmp/

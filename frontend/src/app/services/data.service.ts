@@ -82,21 +82,16 @@ export class DataService {
   public async login(username: string, password: string): Promise<boolean> {
     try {
       const response = await firstValueFrom(
-        this.http.post<{ token: string; user: any }>(`${this.apiUrl}/auth/login`, { username, password }).pipe(
+        this.http.post<{ token: string; user: User }>(`${this.apiUrl}/auth/login`, { username, password }).pipe(
           catchError(() => of(null))
         )
       );
 
       if (response?.token && response.user) {
-        // Normalize: backend returns fullName, frontend expects name
-        const normalizedUser = {
-          ...response.user,
-          name: response.user.name || response.user.fullName || response.user.username,
-        };
         sessionStorage.setItem('tp_token', response.token);
-        sessionStorage.setItem('tp_active_user', JSON.stringify(normalizedUser));
-        this.currentUser.set(normalizedUser);
-        this.loadUserData(normalizedUser.id || normalizedUser._id);
+        sessionStorage.setItem('tp_active_user', JSON.stringify(response.user));
+        this.currentUser.set(response.user);
+        this.loadUserData(response.user.id);
         return true;
       }
     } catch {
@@ -107,14 +102,9 @@ export class DataService {
     const user = users.find((u: any) => u.username === username.trim() && u.password === password.trim());
     if (user) {
       const { password: _, ...userSession } = user;
-      // Ensure name is always set
-      const normalizedSession = {
-        ...userSession,
-        name: userSession.name || userSession.fullName || userSession.username,
-      };
-      sessionStorage.setItem('tp_active_user', JSON.stringify(normalizedSession));
-      this.currentUser.set(normalizedSession);
-      this.loadUserData(normalizedSession.id);
+      sessionStorage.setItem('tp_active_user', JSON.stringify(userSession));
+      this.currentUser.set(userSession);
+      this.loadUserData(userSession.id);
       return true;
     }
     return false;
@@ -128,7 +118,8 @@ export class DataService {
           password: signupData.password,
           fullName: signupData.name,
           email: signupData.email,
-          country: signupData.country || 'India',
+          country: 'India',
+          state: signupData.state || 'Maharashtra',
           incomeBracket: signupData.incomeBracket || 'Medium'
         }).pipe(catchError(() => of(null)))
       );
@@ -151,7 +142,8 @@ export class DataService {
       password: signupData.password,
       name: signupData.name,
       email: signupData.email,
-      country: signupData.country || 'India',
+      country: 'India',
+      state: signupData.state || 'Maharashtra',
       incomeBracket: signupData.incomeBracket || 'Medium'
     };
 
@@ -162,35 +154,6 @@ export class DataService {
     this.seedDefaultTransactions(newUser.id);
 
     return this.login(newUser.username, newUser.password);
-  }
-
-  public async forgotPassword(email: string): Promise<{ success: boolean; message: string }> {
-    try {
-      const response = await firstValueFrom(
-        this.http.post<{ message: string }>(`${this.apiUrl}/auth/forgot-password`, { email }).pipe(
-          catchError((err) => of({ message: err?.error?.message || 'Error sending reset email.' }))
-        )
-      );
-      return { success: true, message: response?.message || 'Reset email sent.' };
-    } catch {
-      return { success: false, message: 'Unable to connect. Please try again.' };
-    }
-  }
-
-  public async resetPassword(token: string, newPassword: string): Promise<{ success: boolean; message: string }> {
-    try {
-      const response = await firstValueFrom(
-        this.http.post<{ message: string }>(`${this.apiUrl}/auth/reset-password`, { token, newPassword }).pipe(
-          catchError((err) => of({ message: err?.error?.message || 'Reset failed.', __error: true } as any))
-        )
-      );
-      if ((response as any).__error) {
-        return { success: false, message: response.message };
-      }
-      return { success: true, message: response.message };
-    } catch {
-      return { success: false, message: 'Unable to connect. Please try again.' };
-    }
   }
 
   public logout(): void {
@@ -401,63 +364,5 @@ export class DataService {
       });
     });
     this.saveData('tp_budgets', allBudgets);
-  }
-
-  public async recommendCategory(description: string, type: 'income' | 'expense'): Promise<string | null> {
-    try {
-      const response = await firstValueFrom(
-        this.http.get<{ category: string | null }>(
-          `${this.apiUrl}/categories/recommend`,
-          {
-            headers: this.getAuthHeaders(),
-            params: { description, type }
-          }
-        )
-      );
-      if (response && response.category) {
-        return response.category;
-      }
-    } catch (e) {
-      // fallback on error
-    }
-    return this.recommendCategoryLocally(description, type);
-  }
-
-  private recommendCategoryLocally(description: string, type: 'income' | 'expense'): string | null {
-    const descLower = description.toLowerCase();
-    const defaults = [
-      { name: 'Office Rent', type: 'expense', keywords: ['rent', 'office', 'hotdesk', 'coworking', 'lease', 'desk', 'workspace'] },
-      { name: 'Business Expenses', type: 'expense', keywords: ['aws', 'server', 'hosting', 'cloud', 'azure', 'database', 'domain', 'ssl'] },
-      { name: 'Utilities', type: 'expense', keywords: ['electricity', 'water', 'wifi', 'internet', 'broadband', 'phone', 'mobile'] },
-      { name: 'Food', type: 'expense', keywords: ['food', 'restaurant', 'lunch', 'dinner', 'breakfast', 'meal', 'cafe', 'swiggy', 'zomato'] },
-      { name: 'Software Subscriptions', type: 'expense', keywords: ['github', 'slack', 'zoom', 'figma', 'copilot', 'openai', 'adobe', 'subscriptions'] },
-      { name: 'Professional Development', type: 'expense', keywords: ['course', 'book', 'udemy', 'training', 'ebook'] },
-      { name: 'Marketing', type: 'expense', keywords: ['ads', 'marketing', 'facebook ads', 'google ads', 'promotion', 'sponsor'] },
-      { name: 'Travel', type: 'expense', keywords: ['ola', 'uber', 'taxi', 'cab', 'flight', 'train', 'travel'] },
-      { name: 'Meals & Entertainment', type: 'expense', keywords: ['client dinner', 'movie', 'client lunch', 'cafe'] },
-      { name: 'Consulting', type: 'income', keywords: ['consulting', 'consult', 'advise', 'advice', 'session'] },
-      { name: 'Design Project', type: 'income', keywords: ['design', 'logo', 'mockup', 'wireframe', 'frontend', 'landing page'] },
-      { name: 'SaaS Subscriptions', type: 'income', keywords: ['saas', 'subscriptions', 'stripe'] },
-      { name: 'Ad Revenue', type: 'income', keywords: ['ad', 'adsense', 'youtube', 'sponsorship'] }
-    ];
-
-    let bestMatch = null;
-    let maxScore = 0;
-
-    const filtered = defaults.filter(d => d.type === type);
-    for (const item of filtered) {
-      let score = 0;
-      for (const kw of item.keywords) {
-        if (descLower.includes(kw)) {
-          score += kw.length;
-        }
-      }
-      if (score > maxScore) {
-        maxScore = score;
-        bestMatch = item.name;
-      }
-    }
-
-    return bestMatch;
   }
 }

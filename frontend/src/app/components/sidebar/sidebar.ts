@@ -199,7 +199,6 @@ export class Sidebar {
 
   protected handleLogout(): void {
     this.authService.logout();
-    window.location.href = '/login';
   }
 
   protected getSafeHtml(html: string) {
