@@ -1,4 +1,4 @@
-import { Component, computed, signal, OnInit, inject } from '@angular/core';
+import { Component, computed, signal, OnInit, inject, ChangeDetectorRef } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DataService } from '../../services/data.service';
 import { CategoryService } from '../../services/category.service';
@@ -220,6 +220,7 @@ import { Category } from '../../models';
               <input
                 id="tx-desc" name="tx-desc" type="text" required
                 [(ngModel)]="txDescription"
+                (ngModelChange)="onDescriptionChange($event)"
                 placeholder="e.g. Client payment, Office rent..."
                 class="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
@@ -255,10 +256,11 @@ import { Category } from '../../models';
               <select
                 id="tx-category" name="tx-category" required
                 [(ngModel)]="txCategory"
+                (change)="onCategoryManualChange()"
                 class="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="" disabled>Select a category</option>
-                @for (cat of categoriesForType(); track ($index)) {
+                @for (cat of categoriesForType(); track cat.name) {
                   <option [value]="cat.name">{{ cat.name }}</option>
                 }
               </select>
@@ -310,8 +312,9 @@ export class TransactionsPageComponent implements OnInit {
   protected txNotes = '';
 
   private categoryService = inject(CategoryService);
+  private cdr = inject(ChangeDetectorRef);
 
-  constructor(private dataService: DataService) {}
+  constructor(private dataService: DataService) { }
 
   ngOnInit(): void {
     this.categoryService.loadCategories();
@@ -365,12 +368,25 @@ export class TransactionsPageComponent implements OnInit {
   protected categoriesForType = computed(() => {
     const type = this.activeModalType();
     if (!type) return [];
-    // Prefer backend categories (from CategoryService)
-    const backendCats = this.categoryService.categories().filter(c => c.type === type);
-    if (backendCats.length > 0) return backendCats;
-    // Fallback to localStorage categories (DataService)
-    return this.dataService.categories().filter(c => c.type === type);
+
+    const serviceCats = this.categoryService.mergedCategories(type);
+    const localCats = this.dataService.categories().filter(c => c.type === type);
+
+    const seen = new Set<string>();
+    const result: Category[] = [];
+
+    for (const c of [...serviceCats, ...localCats]) {
+      const key = c.name.trim().toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        result.push(c);
+      }
+    }
+    return result;
   });
+
+  private isCategoryManuallyTouched = false;
+  private debounceTimer: any = null;
 
   protected openModal(type: 'income' | 'expense'): void {
     this.activeModalType.set(type);
@@ -379,10 +395,43 @@ export class TransactionsPageComponent implements OnInit {
     this.txCategory = '';
     this.txDate = new Date().toISOString().split('T')[0];
     this.txNotes = '';
+    this.isCategoryManuallyTouched = false;
+    if (this.debounceTimer) clearTimeout(this.debounceTimer);
   }
 
   protected closeModal(): void {
+    if (this.debounceTimer) clearTimeout(this.debounceTimer);
     this.activeModalType.set(null);
+  }
+
+  protected onDescriptionChange(val: string): void {
+    this.txDescription = val;
+    if (this.isCategoryManuallyTouched) return;
+
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer);
+    }
+
+    if (!val || !val.trim()) {
+      this.txCategory = '';
+      this.cdr.markForCheck();
+      return;
+    }
+
+    this.debounceTimer = setTimeout(() => {
+      const type = this.activeModalType();
+      if (!type) return;
+
+      const suggestion = this.categoryService.suggestCategory(val, type);
+      if (suggestion) {
+        this.txCategory = suggestion;
+        this.cdr.markForCheck();
+      }
+    }, 400);
+  }
+
+  protected onCategoryManualChange(): void {
+    this.isCategoryManuallyTouched = true;
   }
 
   protected saveTransaction(event: Event): void {

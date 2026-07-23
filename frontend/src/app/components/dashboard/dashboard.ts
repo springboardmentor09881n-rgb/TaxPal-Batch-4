@@ -1,4 +1,4 @@
-import { Component, signal, computed, output, OnInit, inject } from '@angular/core';
+import { Component, signal, computed, output, OnInit, inject, ChangeDetectorRef } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { DataService } from '../../services/data.service';
@@ -314,7 +314,8 @@ interface CategoryTotal {
                   name="desc"
                   type="text" 
                   required
-                  [(ngModel)]="txDescription"
+                  [ngModel]="txDescription"
+                  (ngModelChange)="onDescriptionChange($event)"
                   placeholder="e.g. Consulting redraft"
                   class="w-full px-4 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
@@ -359,11 +360,12 @@ interface CategoryTotal {
                   id="category"
                   name="category"
                   required
-                  [(ngModel)]="txCategory"
+                  [ngModel]="txCategory"
+                  (ngModelChange)="onCategoryManualChange($event)"
                   class="w-full px-4 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="" disabled>Select a category</option>
-                  @for (cat of categoriesForType(); track $index) {
+                  @for (cat of categoriesForType(); track cat.name) {
                     <option [value]="cat.name">{{ cat.name }}</option>
                   }
                 </select>
@@ -417,8 +419,9 @@ export class Dashboard implements OnInit {
   protected txNotes = '';
 
   private categoryService = inject(CategoryService);
+  private cdr = inject(ChangeDetectorRef);
 
-  constructor(private dataService: DataService, private router: Router) {}
+  constructor(private dataService: DataService, private router: Router) { }
 
   ngOnInit(): void {
     this.categoryService.loadCategories();
@@ -565,8 +568,25 @@ export class Dashboard implements OnInit {
   protected categoriesForType = computed(() => {
     const type = this.activeModalType();
     if (!type) return [];
-    return this.categoryService.mergedCategories(type);
+
+    const serviceCats = this.categoryService.mergedCategories(type);
+    const localCats = this.dataService.categories().filter(c => c.type === type);
+
+    const seen = new Set<string>();
+    const result: Category[] = [];
+
+    for (const c of [...serviceCats, ...localCats]) {
+      const key = c.name.trim().toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        result.push(c);
+      }
+    }
+    return result;
   });
+
+  private isCategoryManuallyTouched = false;
+  private debounceTimer: any = null;
 
   protected openModal(type: 'income' | 'expense'): void {
     this.activeModalType.set(type);
@@ -575,10 +595,44 @@ export class Dashboard implements OnInit {
     this.txCategory = '';
     this.txDate = new Date().toISOString().split('T')[0];
     this.txNotes = '';
+    this.isCategoryManuallyTouched = false;
+    if (this.debounceTimer) clearTimeout(this.debounceTimer);
   }
 
   protected closeModal(): void {
+    if (this.debounceTimer) clearTimeout(this.debounceTimer);
     this.activeModalType.set(null);
+  }
+
+  protected onDescriptionChange(val: string): void {
+    this.txDescription = val;
+    if (this.isCategoryManuallyTouched) return;
+
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer);
+    }
+
+    if (!val || !val.trim()) {
+      this.txCategory = '';
+      this.cdr.markForCheck();
+      return;
+    }
+
+    this.debounceTimer = setTimeout(() => {
+      const type = this.activeModalType();
+      if (!type) return;
+
+      const suggestion = this.categoryService.suggestCategory(val, type);
+      if (suggestion) {
+        this.txCategory = suggestion;
+        this.cdr.markForCheck();
+      }
+    }, 400);
+  }
+
+  protected onCategoryManualChange(val: string): void {
+    this.txCategory = val;
+    this.isCategoryManuallyTouched = true;
   }
 
   protected saveTransaction(event: Event): void {

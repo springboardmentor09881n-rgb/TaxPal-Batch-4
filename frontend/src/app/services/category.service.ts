@@ -34,8 +34,13 @@ export class CategoryService {
 
   readonly categories = signal<Category[]>([]);
 
+  private getAuthOptions() {
+    const token = localStorage.getItem('tp_token');
+    return token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+  }
+
   loadCategories(): void {
-    this.http.get<Category[]>(`${environment.apiUrl}/categories`).subscribe({
+    this.http.get<Category[]>(`${environment.apiUrl}/categories`, this.getAuthOptions()).subscribe({
       next: (res) => {
         this.categories.set(res || []);
       },
@@ -73,7 +78,7 @@ export class CategoryService {
   }
 
   addCategory(category: any): Observable<Category> {
-    return this.http.post<Category>(`${environment.apiUrl}/categories`, category).pipe(
+    return this.http.post<Category>(`${environment.apiUrl}/categories`, category, this.getAuthOptions()).pipe(
       tap((newCat) => {
         const current = this.categories();
         this.categories.set([...current, newCat]);
@@ -82,7 +87,7 @@ export class CategoryService {
   }
 
   updateCategory(id: string, category: any): Observable<Category> {
-    return this.http.put<Category>(`${environment.apiUrl}/categories/${id}`, category).pipe(
+    return this.http.put<Category>(`${environment.apiUrl}/categories/${id}`, category, this.getAuthOptions()).pipe(
       tap((updatedCat) => {
         const current = this.categories().map(c => c._id === id || c.id === id ? { ...c, ...updatedCat } : c);
         this.categories.set(current);
@@ -91,10 +96,62 @@ export class CategoryService {
   }
 
   deleteCategory(id: string): Observable<any> {
-    return this.http.delete<any>(`${environment.apiUrl}/categories/${id}`).pipe(
+    return this.http.delete<any>(`${environment.apiUrl}/categories/${id}`, this.getAuthOptions()).pipe(
       tap(() => {
         this.categories.set(this.categories().filter((item: Category) => item._id !== id && item.id !== id));
       })
     );
+  }
+
+  suggestCategory(description: string, type: 'income' | 'expense'): string | null {
+    const text = (description || '').trim().toLowerCase();
+    if (!text) return null;
+
+    const availableCategories = this.mergedCategories(type);
+    if (!availableCategories || availableCategories.length === 0) return null;
+
+    const categoryNames = availableCategories.map(c => c.name);
+
+    // Rule dictionary mapping keywords to potential category names
+    const rules: { keywords: string[]; category: string }[] = type === 'expense' ? [
+      { keywords: ['rent', 'pg', 'flat', 'lease', 'hotdesk', 'office rent'], category: 'Office Rent' },
+      { keywords: ['housing', 'apartment', 'mortgage'], category: 'Housing' },
+      { keywords: ['aws', 'hosting', 'server', 'cloud', 'domain', 'azure', 'gcp'], category: 'Business Expenses' },
+      { keywords: ['uber', 'ola', 'flight', 'train', 'cab', 'petrol', 'diesel', 'fuel', 'taxi', 'outstation', 'airfare'], category: 'Travel' },
+      { keywords: ['bus', 'metro', 'commute', 'transit', 'transport'], category: 'Transportation' },
+      { keywords: ['swiggy', 'zomato', 'food', 'lunch', 'dinner', 'cafe', 'restaurant', 'coffee', 'starbucks', 'mcdonalds', 'meal', 'snacks', 'eating out'], category: 'Meals & Entertainment' },
+      { keywords: ['groceries', 'supermarket', 'vegetables', 'fruits'], category: 'Food' },
+      { keywords: ['slack', 'github', 'chatgpt', 'zoom', 'software', 'saas', 'subscription', 'notion', 'figma', 'jetbrains', 'adobe', 'netflix', 'spotify'], category: 'Software Subscriptions' },
+      { keywords: ['wifi', 'internet', 'electricity', 'water', 'utility', 'broadband', 'recharge', 'mobile bill', 'power'], category: 'Utilities' },
+      { keywords: ['course', 'udemy', 'coursera', 'book', 'certification', 'training', 'workshop', 'tuition'], category: 'Professional Development' },
+      { keywords: ['ads', 'facebook ads', 'google ads', 'campaign', 'marketing', 'promotion', 'flyer', 'adverts'], category: 'Marketing' },
+      { keywords: ['shirt', 'clothes', 'amazon', 'flipkart', 'shopping', 'shoes', 'electronics', 'gadget'], category: 'Shopping' }
+    ] : [
+      { keywords: ['design', 'client project', 'freelance project', 'ui/ux', 'website design'], category: 'Design Project' },
+      { keywords: ['consulting', 'advisor', 'consultant', 'review', 'coaching'], category: 'Consulting' },
+      { keywords: ['saas', 'subscription payout', 'app sales', 'mrr'], category: 'SaaS Subscriptions' },
+      { keywords: ['ad revenue', 'adsense', 'youtube', 'monetization', 'sponsorship'], category: 'Ad Revenue' },
+      { keywords: ['salary', 'stipend', 'payroll', 'wages', 'bonus'], category: 'Consulting' }
+    ];
+
+    // Try matching rules
+    for (const rule of rules) {
+      if (rule.keywords.some(kw => text.includes(kw))) {
+        // Find closest matching available category name case-insensitively
+        const match = categoryNames.find(c => c.toLowerCase() === rule.category.toLowerCase());
+        if (match) return match;
+      }
+    }
+
+    // Fallback: Check if description explicitly contains any available category name directly
+    for (const catName of categoryNames) {
+      if (catName.toLowerCase() !== 'other' && text.includes(catName.toLowerCase())) {
+        return catName;
+      }
+    }
+
+    // If no match was found, suggest 'Other' if available
+    const otherMatch = categoryNames.find(c => c.toLowerCase() === 'other');
+    return otherMatch || null;
   }
 }
