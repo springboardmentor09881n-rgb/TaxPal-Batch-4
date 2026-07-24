@@ -141,12 +141,11 @@ interface CategoryTotal {
               <!-- X Axis (baseline, at the bottom of the chart) -->
               <line x1="60" y1="240" x2="580" y2="240" stroke="#cbd5e1" stroke-width="1.5" />
 
-              <!-- Y Axis labels (fixed tick set) -->
-              <text x="50" y="24" fill="#94a3b8" font-size="11" text-anchor="end">₹10k</text>
-              <text x="50" y="79" fill="#94a3b8" font-size="11" text-anchor="end">₹8k</text>
-              <text x="50" y="134" fill="#94a3b8" font-size="11" text-anchor="end">₹5k</text>
-              <text x="50" y="189" fill="#94a3b8" font-size="11" text-anchor="end">₹3k</text>
-              <text x="50" y="244" fill="#94a3b8" font-size="11" text-anchor="end">₹0</text>
+              <!-- Y Axis labels (dynamic tick set) -->
+              @for (tick of yAxisTicks(); track $index) {
+                <text x="50" [attr.y]="tick.y" fill="#94a3b8" font-size="11" text-anchor="end">{{ tick.label }}</text>
+              }
+
 
               <!-- Dynamic Monthly Bars -->
               @for (bar of monthlyBars(); track $index) {
@@ -429,8 +428,49 @@ export class Dashboard implements OnInit {
 
   protected userName = computed(() => this.dataService.currentUser()?.name || 'Alex Morgan');
 
+  protected maxChartValue = computed<number>(() => {
+    let max = 0;
+    for (const b of this.monthlyBars()) {
+      if (b.income > max) max = b.income;
+      if (b.expense > max) max = b.expense;
+    }
+    if (max === 0) return 10000;
+    const magnitude = Math.pow(10, Math.floor(Math.log10(max)));
+    return Math.ceil(max / magnitude) * magnitude;
+  });
+
+  protected yAxisTicks = computed<{ y: number; label: string }[]>(() => {
+    const max = this.maxChartValue();
+    const steps = [
+      { ratio: 1.0, y: 24 },
+      { ratio: 0.75, y: 79 },
+      { ratio: 0.50, y: 134 },
+      { ratio: 0.25, y: 189 },
+      { ratio: 0, y: 244 }
+    ];
+    return steps.map(s => ({
+      y: s.y,
+      label: this.formatYLabel(max * s.ratio)
+    }));
+  });
+
+  protected formatYLabel(val: number): string {
+    if (val === 0) return '₹0';
+    if (val >= 100000) {
+      const formatted = (val / 100000).toFixed(val % 100000 === 0 ? 0 : 1);
+      return `₹${formatted}L`;
+    }
+    if (val >= 1000) {
+      const formatted = (val / 1000).toFixed(val % 1000 === 0 ? 0 : 1);
+      return `₹${formatted}k`;
+    }
+    return `₹${Math.round(val)}`;
+  }
+
   protected barPixelHeight(val: number): number {
-    return Math.min(220, (val / 10000) * 220) || 0;
+    const max = this.maxChartValue();
+    if (!max || max <= 0 || !val || val <= 0) return 0;
+    return Math.min(220, (val / max) * 220);
   }
 
   protected recentTransactions = computed(() => {
@@ -440,14 +480,14 @@ export class Dashboard implements OnInit {
   protected monthlyIncome = computed(() => {
     const currentMonth = new Date().toISOString().slice(0, 7);
     return this.dataService.transactions()
-      .filter(t => t.type === 'income' && t.date.startsWith(currentMonth))
+      .filter(t => t.type === 'income' && t.date && t.date.startsWith(currentMonth))
       .reduce((sum, t) => sum + t.amount, 0);
   });
 
   protected monthlyExpenses = computed(() => {
     const currentMonth = new Date().toISOString().slice(0, 7);
     return this.dataService.transactions()
-      .filter(t => t.type === 'expense' && t.date.startsWith(currentMonth))
+      .filter(t => t.type === 'expense' && t.date && t.date.startsWith(currentMonth))
       .reduce((sum, t) => sum + t.amount, 0);
   });
 
@@ -467,33 +507,35 @@ export class Dashboard implements OnInit {
   });
 
   protected chartMonths = computed<{ label: string; prefix: string }[]>(() => {
-    const year = new Date().getFullYear();
-    const labels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
-    return labels.map((label, idx) => ({
-      label,
-      prefix: `${year}-${String(idx + 1).padStart(2, '0')}`
-    }));
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const result: { label: string; prefix: string }[] = [];
+    const now = new Date();
+
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const year = d.getFullYear();
+      const monthIdx = d.getMonth();
+      const monthStr = String(monthIdx + 1).padStart(2, '0');
+      result.push({
+        label: monthNames[monthIdx],
+        prefix: `${year}-${monthStr}`
+      });
+    }
+
+    return result;
   });
 
-  // Illustrative placeholder values (₹) shown only for a month that has zero
-  // real transactions, so the chart still reads as a trend before the user
-  // has logged data for every month in view.
-  private readonly sampleTrend: { income: number; expense: number }[] = [
-    { income: 8000, expense: 3500 },  // Jan
-    { income: 7000, expense: 3200 },  // Feb
-    { income: 8500, expense: 3700 },  // Mar
-    { income: 7800, expense: 3400 },  // Apr
-    { income: 9000, expense: 3600 },  // May
-    { income: 8200, expense: 3300 }   // Jun
-  ];
-
-  // Chart now always renders these seven months with the requested sample
-  // values, so the bars stay consistent and visible regardless of whatever
-  // small transaction amounts may exist in the underlying data.
   protected monthlyBars = computed<MonthlyTotal[]>(() => {
-    return this.chartMonths().map(({ label }, idx) => {
-      const sample = this.sampleTrend[idx];
-      return { label, income: sample.income, expense: sample.expense };
+    const txs = this.dataService.transactions();
+    return this.chartMonths().map(({ label, prefix }) => {
+      const monthTxs = txs.filter(t => t.date && t.date.startsWith(prefix));
+      const income = monthTxs
+        .filter(t => t.type === 'income')
+        .reduce((sum, t) => sum + t.amount, 0);
+      const expense = monthTxs
+        .filter(t => t.type === 'expense')
+        .reduce((sum, t) => sum + t.amount, 0);
+      return { label, income, expense };
     });
   });
 
