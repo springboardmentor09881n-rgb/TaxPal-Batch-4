@@ -40,6 +40,17 @@ import { Budget } from '../../models';
           </div>
           
           <form (ngSubmit)="saveBudget()" class="p-6">
+            @if (errorMessage()) {
+              <div class="mb-6 p-4 bg-red-50 border border-red-200/60 rounded-xl text-red-700 text-xs font-semibold flex items-center justify-between animate-[fadeIn_0.2s_ease-out]">
+                <div class="flex items-center gap-2">
+                  <svg class="h-4 w-4 text-red-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3Z" />
+                  </svg>
+                  <span>{{ errorMessage() }}</span>
+                </div>
+                <button type="button" (click)="errorMessage.set(null)" class="text-red-400 hover:text-red-600 font-bold text-sm bg-transparent border-0 cursor-pointer">×</button>
+              </div>
+            }
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
               <!-- Category -->
               <div>
@@ -148,6 +159,7 @@ export class BudgetsPageComponent implements OnInit {
 
   editingId: string | null = null;
   readonly isFormOpen = signal<boolean>(false);
+  readonly errorMessage = signal<string | null>(null);
 
   formData: any = {
     category: '',
@@ -217,6 +229,7 @@ export class BudgetsPageComponent implements OnInit {
 
   openCreateForm() {
     this.editingId = null;
+    this.errorMessage.set(null);
     this.formData = {
       category: '',
       budget_amount: null,
@@ -230,6 +243,7 @@ export class BudgetsPageComponent implements OnInit {
   resetForm() {
     this.editingId = null;
     this.isFormOpen.set(false);
+    this.errorMessage.set(null);
     this.formData = {
       category: '',
       budget_amount: null,
@@ -241,6 +255,7 @@ export class BudgetsPageComponent implements OnInit {
 
   editBudget(budget: Budget) {
     this.editingId = budget._id || budget.id || null;
+    this.errorMessage.set(null);
     this.formData = {
       category: budget.category,
       budget_amount: budget.budget_amount,
@@ -252,13 +267,26 @@ export class BudgetsPageComponent implements OnInit {
   }
 
   saveBudget() {
+    this.errorMessage.set(null);
     if (this.editingId) {
-      this.budgetService.updateBudget(this.editingId, this.formData).subscribe(() => {
-        this.resetForm();
+      this.budgetService.updateBudget(this.editingId, this.formData).subscribe({
+        next: () => {
+          this.resetForm();
+        },
+        error: (err) => {
+          const msg = err?.error?.message || 'Failed to update budget. Please try again.';
+          this.errorMessage.set(msg);
+        }
       });
     } else {
-      this.budgetService.addBudget(this.formData).subscribe(() => {
-        this.resetForm();
+      this.budgetService.addBudget(this.formData).subscribe({
+        next: () => {
+          this.resetForm();
+        },
+        error: (err) => {
+          const msg = err?.error?.message || 'Failed to create budget. Please try again.';
+          this.errorMessage.set(msg);
+        }
       });
     }
   }
