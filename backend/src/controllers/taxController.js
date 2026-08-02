@@ -1,34 +1,121 @@
 const TaxEstimate = require('../models/taxEstimates.model');
 const Alert = require('../models/alerts.model');
 
-// Helper to calculate tax based on simple US 2024 Single Filer slabs
-const calculateTax = (taxableIncome, filingStatus) => {
-    let tax = 0;
-    if (taxableIncome <= 0) return 0;
-    
-    // Using single filer brackets as default for demonstration
-    const brackets = [
-        { rate: 0.10, limit: 11600 },
-        { rate: 0.12, limit: 47150 },
-        { rate: 0.22, limit: 100525 },
-        { rate: 0.24, limit: 191950 },
-        { rate: 0.32, limit: 243725 },
-        { rate: 0.35, limit: 609350 },
-        { rate: 0.37, limit: Infinity }
-    ];
+const US_STATES = [
+    { name: 'Alabama', rate: 0.05 }, { name: 'Alaska', rate: 0 }, { name: 'Arizona', rate: 0.025 },
+    { name: 'Arkansas', rate: 0.044 }, { name: 'California', rate: 0.093 }, { name: 'Colorado', rate: 0.044 },
+    { name: 'Connecticut', rate: 0.055 }, { name: 'Delaware', rate: 0.066 }, { name: 'Florida', rate: 0 },
+    { name: 'Georgia', rate: 0.0539 }, { name: 'Hawaii', rate: 0.0825 }, { name: 'Idaho', rate: 0.058 },
+    { name: 'Illinois', rate: 0.0495 }, { name: 'Indiana', rate: 0.0305 }, { name: 'Iowa', rate: 0.038 },
+    { name: 'Kansas', rate: 0.052 }, { name: 'Kentucky', rate: 0.04 }, { name: 'Louisiana', rate: 0.0425 },
+    { name: 'Maine', rate: 0.0715 }, { name: 'Maryland', rate: 0.0575 }, { name: 'Massachusetts', rate: 0.05 },
+    { name: 'Michigan', rate: 0.0425 }, { name: 'Minnesota', rate: 0.0785 }, { name: 'Mississippi', rate: 0.047 },
+    { name: 'Missouri', rate: 0.048 }, { name: 'Montana', rate: 0.059 }, { name: 'Nebraska', rate: 0.052 },
+    { name: 'Nevada', rate: 0 }, { name: 'New Hampshire', rate: 0 }, { name: 'New Jersey', rate: 0.0637 },
+    { name: 'New Mexico', rate: 0.049 }, { name: 'New York', rate: 0.0685 }, { name: 'North Carolina', rate: 0.0425 },
+    { name: 'North Dakota', rate: 0.025 }, { name: 'Ohio', rate: 0.035 }, { name: 'Oklahoma', rate: 0.0475 },
+    { name: 'Oregon', rate: 0.0875 }, { name: 'Pennsylvania', rate: 0.0307 }, { name: 'Rhode Island', rate: 0.0599 },
+    { name: 'South Carolina', rate: 0.062 }, { name: 'South Dakota', rate: 0 }, { name: 'Tennessee', rate: 0 },
+    { name: 'Texas', rate: 0 }, { name: 'Utah', rate: 0.0455 }, { name: 'Vermont', rate: 0.066 },
+    { name: 'Virginia', rate: 0.0575 }, { name: 'Washington', rate: 0 }, { name: 'West Virginia', rate: 0.0482 },
+    { name: 'Wisconsin', rate: 0.053 }, { name: 'Wyoming', rate: 0 }, { name: 'District of Columbia', rate: 0.0895 }
+];
 
-    let previousLimit = 0;
+const FEDERAL_BRACKETS = {
+    'Single': [
+        { upTo: 11925, rate: 0.10 }, { upTo: 48475, rate: 0.12 }, { upTo: 103350, rate: 0.22 },
+        { upTo: 197300, rate: 0.24 }, { upTo: 250525, rate: 0.32 }, { upTo: 626350, rate: 0.35 },
+        { upTo: Infinity, rate: 0.37 }
+    ],
+    'SINGLE': [
+        { upTo: 11925, rate: 0.10 }, { upTo: 48475, rate: 0.12 }, { upTo: 103350, rate: 0.22 },
+        { upTo: 197300, rate: 0.24 }, { upTo: 250525, rate: 0.32 }, { upTo: 626350, rate: 0.35 },
+        { upTo: Infinity, rate: 0.37 }
+    ],
+    'Married Filing Jointly': [
+        { upTo: 23850, rate: 0.10 }, { upTo: 96950, rate: 0.12 }, { upTo: 206700, rate: 0.22 },
+        { upTo: 394600, rate: 0.24 }, { upTo: 501050, rate: 0.32 }, { upTo: 751600, rate: 0.35 },
+        { upTo: Infinity, rate: 0.37 }
+    ],
+    'MARRIED_FILING_JOINTLY': [
+        { upTo: 23850, rate: 0.10 }, { upTo: 96950, rate: 0.12 }, { upTo: 206700, rate: 0.22 },
+        { upTo: 394600, rate: 0.24 }, { upTo: 501050, rate: 0.32 }, { upTo: 751600, rate: 0.35 },
+        { upTo: Infinity, rate: 0.37 }
+    ],
+    'Head of Household': [
+        { upTo: 17000, rate: 0.10 }, { upTo: 64850, rate: 0.12 }, { upTo: 103350, rate: 0.22 },
+        { upTo: 197300, rate: 0.24 }, { upTo: 250500, rate: 0.32 }, { upTo: 626350, rate: 0.35 },
+        { upTo: Infinity, rate: 0.37 }
+    ],
+    'HEAD_OF_HOUSEHOLD': [
+        { upTo: 17000, rate: 0.10 }, { upTo: 64850, rate: 0.12 }, { upTo: 103350, rate: 0.22 },
+        { upTo: 197300, rate: 0.24 }, { upTo: 250500, rate: 0.32 }, { upTo: 626350, rate: 0.35 },
+        { upTo: Infinity, rate: 0.37 }
+    ],
+    'Married Filing Separately': [
+        { upTo: 11925, rate: 0.10 }, { upTo: 48475, rate: 0.12 }, { upTo: 103350, rate: 0.22 },
+        { upTo: 197300, rate: 0.24 }, { upTo: 250525, rate: 0.32 }, { upTo: 375800, rate: 0.35 },
+        { upTo: Infinity, rate: 0.37 }
+    ],
+    'MARRIED_FILING_SEPARATELY': [
+        { upTo: 11925, rate: 0.10 }, { upTo: 48475, rate: 0.12 }, { upTo: 103350, rate: 0.22 },
+        { upTo: 197300, rate: 0.24 }, { upTo: 250525, rate: 0.32 }, { upTo: 375800, rate: 0.35 },
+        { upTo: Infinity, rate: 0.37 }
+    ]
+};
+
+const INDIA_SLABS = [
+    { upTo: 300000, rate: 0 },
+    { upTo: 700000, rate: 0.05 },
+    { upTo: 1000000, rate: 0.10 },
+    { upTo: 1200000, rate: 0.15 },
+    { upTo: 1500000, rate: 0.20 },
+    { upTo: Infinity, rate: 0.30 }
+];
+
+const SELF_EMPLOYMENT_TAX_RATE = 0.153;
+
+const computeProgressiveTax = (annualIncome, brackets) => {
+    if (annualIncome <= 0) return 0;
+    let tax = 0;
+    let lower = 0;
     for (const bracket of brackets) {
-        if (taxableIncome > previousLimit) {
-            const amountInBracket = Math.min(taxableIncome - previousLimit, bracket.limit - previousLimit);
-            tax += amountInBracket * bracket.rate;
-            previousLimit = bracket.limit;
-        } else {
-            break;
-        }
+        if (annualIncome <= lower) break;
+        const taxableInThisBracket = Math.min(annualIncome, bracket.upTo) - lower;
+        tax += taxableInThisBracket * bracket.rate;
+        lower = bracket.upTo;
+        if (annualIncome <= bracket.upTo) break;
     }
-    
     return tax;
+};
+
+// Helper to calculate tax based on country, state, filingStatus, and taxable income
+const calculateTax = (taxableIncome, filingStatus, country = 'United States', state = '') => {
+    if (taxableIncome <= 0) return 0;
+
+    const annualizedNet = taxableIncome * 4;
+    let federalTax = 0;
+    let stateTax = 0;
+    let selfEmploymentTax = 0;
+
+    if (country === 'India') {
+        const annualTax = computeProgressiveTax(annualizedNet, INDIA_SLABS);
+        federalTax = annualTax / 4;
+        stateTax = 0;
+        selfEmploymentTax = 0;
+    } else {
+        const brackets = FEDERAL_BRACKETS[filingStatus] || FEDERAL_BRACKETS['Single'];
+        const annualFederalTax = computeProgressiveTax(annualizedNet, brackets);
+        federalTax = annualFederalTax / 4;
+
+        const stateObj = US_STATES.find(s => s.name.toLowerCase() === (state || '').toLowerCase());
+        const stateRate = stateObj ? stateObj.rate : 0;
+        stateTax = taxableIncome * stateRate;
+
+        selfEmploymentTax = taxableIncome * SELF_EMPLOYMENT_TAX_RATE;
+    }
+
+    return federalTax + stateTax + selfEmploymentTax;
 };
 
 // Calculate and save tax estimate
@@ -56,8 +143,8 @@ exports.calculateTaxEstimate = async (req, res) => {
                                 
         const taxableIncome = Math.max(0, (Number(grossIncomeForQuarter) || 0) - totalDeductions);
         
-        // Calculate tax based on slabs
-        const estimatedTax = calculateTax(taxableIncome, filingStatus);
+        // Calculate tax based on country, state, filing status, and slabs
+        const estimatedTax = calculateTax(taxableIncome, filingStatus, country, state);
         
         // Determine Due Date based on Quarter
         const currentYear = new Date().getFullYear();
@@ -151,10 +238,11 @@ exports.getTaxCalendar = async (req, res) => {
         const calendarEvents = [];
         
         estimates.forEach(est => {
+            const symbol = est.country === 'India' ? '₹' : '$';
             calendarEvents.push({
                 type: 'payment',
                 title: `${est.quarter} Estimated Tax Payment`,
-                description: `Estimated tax payment due. Amount: $${est.estimatedTax.toFixed(2)}`,
+                description: `Estimated tax payment due. Amount: ${symbol}${est.estimatedTax.toFixed(2)}`,
                 date: est.dueDate,
                 quarter: est.quarter
             });
