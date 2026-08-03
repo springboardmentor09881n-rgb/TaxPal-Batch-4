@@ -1,10 +1,10 @@
 import { Component } from '@angular/core';
-import { BudgetsPage as BudgetsPageComponentImpl } from '../../components/budgets-page/budgets-page';
+import { BudgetsPageComponent } from '../../components/budgets-page/budgets-page';
 
 @Component({
-  selector: 'app-budgets-page',
+  selector: 'app-budgets-page-shell',
   standalone: true,
-  imports: [BudgetsPageComponentImpl],
-  template: '<app-budgets></app-budgets>'
+  imports: [BudgetsPageComponent],
+  template: '<app-budgets-list></app-budgets-list>'
 })
-export class BudgetsPageComponent {}
+export class BudgetsPageShellComponent {}

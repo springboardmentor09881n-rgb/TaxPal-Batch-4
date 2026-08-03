@@ -1,10 +1,10 @@
 import { Component } from '@angular/core';
-import { TransactionsPage as TransactionsPageComponentImpl } from '../../components/transactions-page/transactions-page';
+import { TransactionsPageComponent } from '../../components/transactions-page/transactions-page';
 
 @Component({
   selector: 'app-transactions-page',
   standalone: true,
-  imports: [TransactionsPageComponentImpl],
-  template: '<app-transactions></app-transactions>'
+  imports: [TransactionsPageComponent],
+  template: '<app-transactions-list></app-transactions-list>'
 })
-export class TransactionsPageComponent {}
+export class TransactionsPageShellComponent {}

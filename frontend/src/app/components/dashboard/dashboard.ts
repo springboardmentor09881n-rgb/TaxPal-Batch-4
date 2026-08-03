@@ -1,7 +1,8 @@
-import { Component, signal, computed, output } from '@angular/core';
+import { Component, signal, computed, output, OnInit, inject, ChangeDetectorRef } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { DataService } from '../../services/data.service';
+import { CategoryService } from '../../services/category.service';
 import { Category } from '../../models';
 
 interface MonthlyTotal {
@@ -140,12 +141,11 @@ interface CategoryTotal {
               <!-- X Axis (baseline, at the bottom of the chart) -->
               <line x1="60" y1="240" x2="580" y2="240" stroke="#cbd5e1" stroke-width="1.5" />
 
-              <!-- Y Axis labels (fixed tick set) -->
-              <text x="50" y="24" fill="#94a3b8" font-size="11" text-anchor="end">₹10k</text>
-              <text x="50" y="79" fill="#94a3b8" font-size="11" text-anchor="end">₹8k</text>
-              <text x="50" y="134" fill="#94a3b8" font-size="11" text-anchor="end">₹5k</text>
-              <text x="50" y="189" fill="#94a3b8" font-size="11" text-anchor="end">₹3k</text>
-              <text x="50" y="244" fill="#94a3b8" font-size="11" text-anchor="end">₹0</text>
+              <!-- Y Axis labels (dynamic tick set) -->
+              @for (tick of yAxisTicks(); track $index) {
+                <text x="50" [attr.y]="tick.y" fill="#94a3b8" font-size="11" text-anchor="end">{{ tick.label }}</text>
+              }
+
 
               <!-- Dynamic Monthly Bars -->
               @for (bar of monthlyBars(); track $index) {
@@ -219,14 +219,12 @@ interface CategoryTotal {
               </div>
 
               <!-- Legends -->
-              <div class="w-full space-y-2 text-xs">
+              <div class="w-full space-y-2.5 text-xs">
                 @for (cat of categoryTotals().slice(0, 5); track $index) {
-                  <div class="flex justify-between items-center">
-                    <span class="flex items-center gap-2 text-slate-600">
-                      <span class="h-2.5 w-2.5 rounded-full shrink-0" [style.background-color]="cat.color"></span>
-                      {{ cat.name }}
-                    </span>
-                    <span class="font-bold text-slate-900">{{ cat.percentage.toFixed(0) }}%</span>
+                  <div class="flex items-center gap-2">
+                    <span class="h-2.5 w-2.5 rounded-full shrink-0" [style.background-color]="cat.color"></span>
+                    <span class="flex-grow text-slate-600 truncate">{{ cat.name }}</span>
+                    <span class="font-bold text-slate-900 shrink-0">{{ cat.percentage.toFixed(0) }}%</span>
                   </div>
                 }
               </div>
@@ -315,7 +313,8 @@ interface CategoryTotal {
                   name="desc"
                   type="text" 
                   required
-                  [(ngModel)]="txDescription"
+                  [ngModel]="txDescription"
+                  (ngModelChange)="onDescriptionChange($event)"
                   placeholder="e.g. Consulting redraft"
                   class="w-full px-4 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
@@ -360,11 +359,12 @@ interface CategoryTotal {
                   id="category"
                   name="category"
                   required
-                  [(ngModel)]="txCategory"
+                  [ngModel]="txCategory"
+                  (ngModelChange)="onCategoryManualChange($event)"
                   class="w-full px-4 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="" disabled>Select a category</option>
-                  @for (cat of getCategoriesForType(); track cat.id || $index) {
+                  @for (cat of categoriesForType(); track cat.name) {
                     <option [value]="cat.name">{{ cat.name }}</option>
                   }
                 </select>
@@ -406,7 +406,7 @@ interface CategoryTotal {
     </div>
   `
 })
-export class Dashboard {
+export class Dashboard implements OnInit {
   public readonly navigateToTab = output<'transactions' | 'settings'>();
 
   protected readonly activeModalType = signal<'income' | 'expense' | null>(null);
@@ -417,9 +417,61 @@ export class Dashboard {
   protected txDate = new Date().toISOString().split('T')[0];
   protected txNotes = '';
 
-  constructor(private dataService: DataService, private router: Router) {}
+  private categoryService = inject(CategoryService);
+  private cdr = inject(ChangeDetectorRef);
+
+  constructor(private dataService: DataService, private router: Router) { }
+
+  ngOnInit(): void {
+    this.categoryService.loadCategories();
+  }
 
   protected userName = computed(() => this.dataService.currentUser()?.name || 'Alex Morgan');
+
+  protected maxChartValue = computed<number>(() => {
+    let max = 0;
+    for (const b of this.monthlyBars()) {
+      if (b.income > max) max = b.income;
+      if (b.expense > max) max = b.expense;
+    }
+    if (max === 0) return 10000;
+    const magnitude = Math.pow(10, Math.floor(Math.log10(max)));
+    return Math.ceil(max / magnitude) * magnitude;
+  });
+
+  protected yAxisTicks = computed<{ y: number; label: string }[]>(() => {
+    const max = this.maxChartValue();
+    const steps = [
+      { ratio: 1.0, y: 24 },
+      { ratio: 0.75, y: 79 },
+      { ratio: 0.50, y: 134 },
+      { ratio: 0.25, y: 189 },
+      { ratio: 0, y: 244 }
+    ];
+    return steps.map(s => ({
+      y: s.y,
+      label: this.formatYLabel(max * s.ratio)
+    }));
+  });
+
+  protected formatYLabel(val: number): string {
+    if (val === 0) return '₹0';
+    if (val >= 100000) {
+      const formatted = (val / 100000).toFixed(val % 100000 === 0 ? 0 : 1);
+      return `₹${formatted}L`;
+    }
+    if (val >= 1000) {
+      const formatted = (val / 1000).toFixed(val % 1000 === 0 ? 0 : 1);
+      return `₹${formatted}k`;
+    }
+    return `₹${Math.round(val)}`;
+  }
+
+  protected barPixelHeight(val: number): number {
+    const max = this.maxChartValue();
+    if (!max || max <= 0 || !val || val <= 0) return 0;
+    return Math.min(220, (val / max) * 220);
+  }
 
   protected recentTransactions = computed(() => {
     return this.dataService.transactions().slice(0, 3);
@@ -428,14 +480,14 @@ export class Dashboard {
   protected monthlyIncome = computed(() => {
     const currentMonth = new Date().toISOString().slice(0, 7);
     return this.dataService.transactions()
-      .filter(t => t.type === 'income' && t.date.startsWith(currentMonth))
+      .filter(t => t.type === 'income' && t.date && t.date.startsWith(currentMonth))
       .reduce((sum, t) => sum + t.amount, 0);
   });
 
   protected monthlyExpenses = computed(() => {
     const currentMonth = new Date().toISOString().slice(0, 7);
     return this.dataService.transactions()
-      .filter(t => t.type === 'expense' && t.date.startsWith(currentMonth))
+      .filter(t => t.type === 'expense' && t.date && t.date.startsWith(currentMonth))
       .reduce((sum, t) => sum + t.amount, 0);
   });
 
@@ -455,63 +507,56 @@ export class Dashboard {
   });
 
   protected chartMonths = computed<{ label: string; prefix: string }[]>(() => {
-    const year = new Date().getFullYear();
-    const labels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
-    return labels.map((label, idx) => ({
-      label,
-      prefix: `${year}-${String(idx + 1).padStart(2, '0')}`
-    }));
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const result: { label: string; prefix: string }[] = [];
+    const now = new Date();
+
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const year = d.getFullYear();
+      const monthIdx = d.getMonth();
+      const monthStr = String(monthIdx + 1).padStart(2, '0');
+      result.push({
+        label: monthNames[monthIdx],
+        prefix: `${year}-${monthStr}`
+      });
+    }
+
+    return result;
   });
 
-  // Illustrative placeholder values (₹) shown only for a month that has zero
-  // real transactions, so the chart still reads as a trend before the user
-  // has logged data for every month in view.
-  private readonly sampleTrend: { income: number; expense: number }[] = [
-    { income: 8000, expense: 3500 },  // Jan
-    { income: 7000, expense: 3200 },  // Feb
-    { income: 8500, expense: 3700 },  // Mar
-    { income: 7800, expense: 3400 },  // Apr
-    { income: 9000, expense: 3600 },  // May
-    { income: 8200, expense: 3300 }   // Jun
-  ];
-
-  // Chart now always renders these seven months with the requested sample
-  // values, so the bars stay consistent and visible regardless of whatever
-  // small transaction amounts may exist in the underlying data.
   protected monthlyBars = computed<MonthlyTotal[]>(() => {
-    return this.chartMonths().map(({ label }, idx) => {
-      const sample = this.sampleTrend[idx];
-      return { label, income: sample.income, expense: sample.expense };
+    const txs = this.dataService.transactions();
+    return this.chartMonths().map(({ label, prefix }) => {
+      const monthTxs = txs.filter(t => t.date && t.date.startsWith(prefix));
+      const income = monthTxs
+        .filter(t => t.type === 'income')
+        .reduce((sum, t) => sum + t.amount, 0);
+      const expense = monthTxs
+        .filter(t => t.type === 'expense')
+        .reduce((sum, t) => sum + t.amount, 0);
+      return { label, income, expense };
     });
   });
 
-  // Scales bars dynamically from zero against the largest income/expense
-  // value currently in view, so the tallest bar reaches ~85% of the chart.
-  protected chartScale = computed<{ max: number }>(() => {
-    const bars = this.monthlyBars();
-    const max = Math.max(1, ...bars.flatMap(b => [b.income, b.expense]));
-    return { max };
-  });
-
-  protected barPixelHeight(value: number): number {
-    const { max } = this.chartScale();
-    // Chart canvas spans y=20 (top gridline) to y=240 (baseline) = 220px of usable height.
-    const chartHeight = 220;
-    const fillRatio = 0.85; // highest value reaches ~85% of the chart height
-    return Math.min((value / max) * chartHeight * fillRatio, chartHeight * fillRatio);
-  }
-
-  protected formatAxisValue(value: number): string {
-    if (value >= 100000) return `₹${(value / 100000).toFixed(1)}L`;
-    if (value >= 1000) return `₹${(value / 1000).toFixed(0)}k`;
-    return `₹${Math.round(value)}`;
-  }
+  /** Vivid, visually distinct palette for pie slices */
+  private readonly PIE_COLORS = [
+    '#6366f1', // indigo
+    '#10b981', // emerald
+    '#f59e0b', // amber
+    '#ef4444', // red
+    '#3b82f6', // blue
+    '#ec4899', // pink
+    '#14b8a6', // teal
+    '#f97316', // orange
+    '#8b5cf6', // violet
+    '#06b6d4', // cyan
+  ];
 
   protected categoryTotals = computed<CategoryTotal[]>(() => {
     const expenses = this.dataService.transactions().filter(t => t.type === 'expense');
-    const categories = this.dataService.categories().filter(c => c.type === 'expense');
     const totalExp = expenses.reduce((sum, t) => sum + t.amount, 0);
-    
+
     if (totalExp === 0) return [];
 
     const totalsMap: { [key: string]: number } = {};
@@ -519,28 +564,34 @@ export class Dashboard {
       totalsMap[t.category] = (totalsMap[t.category] || 0) + t.amount;
     });
 
-    return Object.keys(totalsMap)
+    const sorted = Object.keys(totalsMap)
       .filter(catName => catName && catName.trim() !== '')
-      .map(catName => {
-        const amount = totalsMap[catName] || 0;
-        const percentage = (amount / totalExp) * 100;
-        const catObj = categories.find(c => c.name === catName);
-        return {
-          name: catName,
-          amount,
-          percentage,
-          color: catObj ? catObj.color : '#64748b'
-        };
-      }).sort((a, b) => b.amount - a.amount);
+      .map(catName => ({
+        name: catName,
+        amount: totalsMap[catName] || 0,
+        percentage: ((totalsMap[catName] || 0) / totalExp) * 100,
+        color: '#64748b' // placeholder, assigned below
+      }))
+      .sort((a, b) => b.amount - a.amount);
+
+    // Assign vivid colors in order
+    return sorted.map((cat, i) => ({
+      ...cat,
+      color: this.PIE_COLORS[i % this.PIE_COLORS.length]
+    }));
   });
 
   protected donutSlices = computed(() => {
-    let accumulatedPercent = 0;
+    // SVG circumference for r=15.9155 ≈ 100 units (so 1% = 1 unit)
+    const CIRC = 100;
+    let accumulated = 0;
     return this.categoryTotals().map(cat => {
-      const percent = cat.percentage;
-      const dashArray = `${percent.toFixed(2)} ${(100 - percent).toFixed(2)}`;
-      const dashOffset = (-accumulatedPercent).toFixed(2);
-      accumulatedPercent += percent;
+      const pct = cat.percentage;
+      const dashArray = `${pct.toFixed(3)} ${(CIRC - pct).toFixed(3)}`;
+      // dashOffset starts at 0 for the first slice; each subsequent slice is offset by the sum of previous percentages
+      // SVG stroke starts at 3 o'clock; we rotate the whole SVG -90deg so it starts at 12 o'clock
+      const dashOffset = (-(accumulated)).toFixed(3);
+      accumulated += pct;
       return {
         name: cat.name,
         color: cat.color,
@@ -556,9 +607,28 @@ export class Dashboard {
     return match ? match.color : '#64748b';
   }
 
-  protected getCategoriesForType(): Category[] {
-    return this.dataService.categories().filter(c => c.type === this.activeModalType());
-  }
+  protected categoriesForType = computed(() => {
+    const type = this.activeModalType();
+    if (!type) return [];
+
+    const serviceCats = this.categoryService.mergedCategories(type);
+    const localCats = this.dataService.categories().filter(c => c.type === type);
+
+    const seen = new Set<string>();
+    const result: Category[] = [];
+
+    for (const c of [...serviceCats, ...localCats]) {
+      const key = c.name.trim().toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        result.push(c);
+      }
+    }
+    return result;
+  });
+
+  private isCategoryManuallyTouched = false;
+  private debounceTimer: any = null;
 
   protected openModal(type: 'income' | 'expense'): void {
     this.activeModalType.set(type);
@@ -567,10 +637,44 @@ export class Dashboard {
     this.txCategory = '';
     this.txDate = new Date().toISOString().split('T')[0];
     this.txNotes = '';
+    this.isCategoryManuallyTouched = false;
+    if (this.debounceTimer) clearTimeout(this.debounceTimer);
   }
 
   protected closeModal(): void {
+    if (this.debounceTimer) clearTimeout(this.debounceTimer);
     this.activeModalType.set(null);
+  }
+
+  protected onDescriptionChange(val: string): void {
+    this.txDescription = val;
+    if (this.isCategoryManuallyTouched) return;
+
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer);
+    }
+
+    if (!val || !val.trim()) {
+      this.txCategory = '';
+      this.cdr.markForCheck();
+      return;
+    }
+
+    this.debounceTimer = setTimeout(() => {
+      const type = this.activeModalType();
+      if (!type) return;
+
+      const suggestion = this.categoryService.suggestCategory(val, type);
+      if (suggestion) {
+        this.txCategory = suggestion;
+        this.cdr.markForCheck();
+      }
+    }, 400);
+  }
+
+  protected onCategoryManualChange(val: string): void {
+    this.txCategory = val;
+    this.isCategoryManuallyTouched = true;
   }
 
   protected saveTransaction(event: Event): void {

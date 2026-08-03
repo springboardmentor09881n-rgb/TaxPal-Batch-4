@@ -161,7 +161,7 @@ const PRESET_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#
                         <button (click)="startEditCategory(cat)" class="text-slate-400 hover:text-blue-600 cursor-pointer bg-transparent border-0 focus:outline-none" aria-label="Edit category">
                           <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" /></svg>
                         </button>
-                        <button (click)="deleteCategory(cat.id)" class="text-slate-400 hover:text-red-500 cursor-pointer bg-transparent border-0 focus:outline-none" aria-label="Delete category">
+                        <button (click)="cat.id && deleteCategory(cat.id)" class="text-slate-400 hover:text-red-500 cursor-pointer bg-transparent border-0 focus:outline-none" aria-label="Delete category">
                           <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
                         </button>
                       </div>
@@ -364,7 +364,7 @@ export class SettingsPage {
 
   // --- Categories ---
   protected startEditCategory(cat: Category): void {
-    this.editingCategoryId.set(cat.id);
+    this.editingCategoryId.set(cat.id || null);
     this.editName = cat.name;
     this.editColor = cat.color;
   }
@@ -381,12 +381,19 @@ export class SettingsPage {
     const original = this.dataService.categories().find(c => c.id === id);
     if (!original) return;
 
+    const oldName = original.name;
+    const newName = this.editName.trim();
+
     this.dataService.deleteCategory(id);
     this.dataService.addCategory({
       type: original.type,
-      name: this.editName.trim(),
+      name: newName,
       color: this.editColor
     });
+
+    if (oldName !== newName) {
+      this.dataService.renameCategoryCascade(oldName, newName, original.type);
+    }
 
     this.editingCategoryId.set(null);
   }
@@ -432,7 +439,7 @@ export class SettingsPage {
   }
 
   // --- Security ---
-  protected changePassword(event: Event): void {
+  protected async changePassword(event: Event): Promise<void> {
     event.preventDefault();
     this.securityError.set('');
     this.securitySuccess.set(false);
@@ -450,10 +457,19 @@ export class SettingsPage {
       return;
     }
 
-    this.securitySuccess.set(true);
-    this.currentPassword = '';
-    this.newPassword = '';
-    this.confirmPassword = '';
-    setTimeout(() => this.securitySuccess.set(false), 2500);
+    try {
+      const res = await this.dataService.changePassword(this.currentPassword, this.newPassword);
+      if (res.success) {
+        this.securitySuccess.set(true);
+        this.currentPassword = '';
+        this.newPassword = '';
+        this.confirmPassword = '';
+        setTimeout(() => this.securitySuccess.set(false), 2500);
+      } else {
+        this.securityError.set(res.message);
+      }
+    } catch (err: any) {
+      this.securityError.set(err.message || 'An error occurred. Please try again.');
+    }
   }
 }

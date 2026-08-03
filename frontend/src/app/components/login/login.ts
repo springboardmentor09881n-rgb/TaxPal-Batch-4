@@ -41,7 +41,7 @@ import { AuthService } from '../../services/auth.service';
             <div>
               <div class="flex items-center justify-between mb-2">
                 <label for="password" class="block text-xs font-semibold text-slate-600 uppercase tracking-wider">Password</label>
-                <a href="#" class="text-xs font-medium text-blue-600 hover:underline">Forgot password?</a>
+                <button type="button" (click)="goToForgotPassword()" class="text-xs font-medium text-blue-600 hover:underline bg-transparent border-0 cursor-pointer focus:outline-none">Forgot password?</button>
               </div>
               <input 
                 id="password" 
@@ -121,7 +121,7 @@ export class Login {
 
     const user = this.dataService.currentUser();
     if (user) {
-      this.authService.login(user);
+      this.authService.setCurrentUser(user);
       await this.router.navigate(['/dashboard']);
     }
   }
@@ -130,5 +130,9 @@ export class Login {
 
   protected goToSignup(): void {
     this.navigateToSignup.emit();
+  }
+
+  protected goToForgotPassword(): void {
+    this.router.navigate(['/forgot-password']);
   }
 }
