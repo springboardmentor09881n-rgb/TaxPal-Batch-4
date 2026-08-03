@@ -2,7 +2,7 @@ import { Component, signal, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { TaxNotificationPanel } from '../tax-notification-panel/tax-notification-panel';
 import { TaxEstimateService } from '../../services/tax-estimate.service';
-import { TaxEstimate, TaxEstimateFilingStatus, TaxAlert } from '../../models';
+import { TaxEstimate, TaxEstimateFilingStatus } from '../../models';
 
 interface Bracket {
   upTo: number;
@@ -706,15 +706,11 @@ export class TaxEstimatorPage {
       this.notifications.set([]);
     } else {
       this.checkAndAutoNotify();
-      this.taxEstimateService.loadAlerts();
-      setTimeout(() => this.syncBackendAlerts(), 500);
     }
   }
 
-
   protected onCountryChange(): void {
     this.stateName = '';
-    this.filingStatus = '';
     this.checkAndAutoNotify();
   }
 
@@ -730,29 +726,6 @@ export class TaxEstimatorPage {
 
   protected dismissNotification(id: string): void {
     this.notifications.update((list: TaxReminder[]) => list.filter((n: TaxReminder) => n.id !== id));
-    // If the id is a MongoDB ObjectId (from backend alerts), dismiss via API
-    if (/^[a-f\d]{24}$/i.test(id)) {
-      this.taxEstimateService.dismissAlert(id).subscribe({
-        error: (err: unknown) => console.error('Failed to dismiss tax alert', err)
-      });
-    }
-  }
-
-  private syncBackendAlerts(): void {
-    if (!this.notificationsEnabled()) return;
-    const backendAlerts: TaxAlert[] = this.taxEstimateService.alerts();
-    backendAlerts.forEach((alert: TaxAlert) => {
-      if (!alert._id || alert.isRead) return;
-      const alreadyShown = this.notifications().some((n: TaxReminder) => n.id === alert._id);
-      if (!alreadyShown) {
-        const reminder: TaxReminder = {
-          id: alert._id,
-          message: alert.message,
-          dueDate: new Date(alert.alertDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-        };
-        this.notifications.update((list: TaxReminder[]) => [...list, reminder]);
-      }
-    });
   }
 
   protected hasReminder(entry: CalendarEntry): boolean {
@@ -788,12 +761,8 @@ export class TaxEstimatorPage {
   constructor() {
     this.quarter = this.quarterOptions()[Math.floor((new Date().getMonth()) / 3)];
     this.taxEstimateService.loadEstimates();
-    this.taxEstimateService.loadAlerts();
     this.checkAndAutoNotify();
-    // After alerts are fetched from backend, merge them into the notification panel
-    setTimeout(() => this.syncBackendAlerts(), 500);
   }
-
 
   protected stateOptions(): StateOption[] {
     if (this.country === 'India') return this.indiaStates;
@@ -855,11 +824,8 @@ export class TaxEstimatorPage {
   protected calculate(event: Event): void {
     event.preventDefault();
 
-    // State/province is only mandatory for United States (where it affects tax calculation).
-    // For other countries the region dropdown is informational; don't block submission.
-    const requiresState = this.country === 'United States';
-    if (!this.country || (requiresState && !this.stateName) || !this.filingStatus) {
-      this.formError.set('Please select country/region, filing status' + (requiresState ? ', and state' : '') + ' before calculating.');
+    if (!this.country || !this.stateName || !this.filingStatus) {
+      this.formError.set('Please select country/region, state/province, and filing status before calculating.');
       return;
     }
     this.formError.set(null);
@@ -979,11 +945,8 @@ export class TaxEstimatorPage {
       next: () => {
         this.saveStatus.set('saved');
         this.taxEstimateService.loadEstimates();
-        this.taxEstimateService.loadAlerts();
         this.checkAndAutoNotify();
-        setTimeout(() => this.syncBackendAlerts(), 500);
       },
-
       error: (err: any) => {
         console.error('Failed to save tax estimate', err);
         // Some backends respond in a way the browser can't cleanly read (a 200/201/204 with

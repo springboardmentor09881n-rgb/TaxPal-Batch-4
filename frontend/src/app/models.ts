@@ -74,15 +74,3 @@ export interface TaxEstimate {
   createdAt?: string;
   updatedAt?: string;
 }
-
-export interface TaxAlert {
-  _id?: string;
-  userId?: string;
-  type: string;
-  message: string;
-  alertDate: string;
-  isRead?: boolean;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
