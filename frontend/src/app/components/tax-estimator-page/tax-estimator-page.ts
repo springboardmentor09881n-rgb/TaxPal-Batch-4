@@ -59,7 +59,7 @@ const US_STATES: StateOption[] = [
   { name: 'Wisconsin', rate: 0.053 }, { name: 'Wyoming', rate: 0 }, { name: 'District of Columbia', rate: 0.0895 }
 ];
 
-type CountryId = 'United States' | 'India' | 'Canada' | 'United Kingdom' | 'Australia' | 'Germany';
+type CountryId = 'United States' | 'India' | 'Canada' | 'United Kingdom' | 'Australia' | 'Germany' | 'European Union' | 'Japan' | 'Singapore' | 'United Arab Emirates';
 
 const CANADA_PROVINCES: StateOption[] = [
   { name: 'Alberta', rate: 0.10 }, { name: 'British Columbia', rate: 0.128 }, { name: 'Manitoba', rate: 0.174 },
@@ -89,6 +89,26 @@ const GERMANY_STATES: StateOption[] = [
   { name: 'Thuringia', rate: 0 }
 ];
 
+const JAPAN_PREFECTURES: StateOption[] = [
+  { name: 'Tokyo', rate: 0.10 }, { name: 'Osaka', rate: 0.10 }, { name: 'Kyoto', rate: 0.10 },
+  { name: 'Kanagawa', rate: 0.10 }, { name: 'Aichi', rate: 0.10 }, { name: 'Hokkaido', rate: 0.10 },
+  { name: 'Fukuoka', rate: 0.10 }, { name: 'Hyogo', rate: 0.10 }, { name: 'Chiba', rate: 0.10 },
+  { name: 'Saitama', rate: 0.10 }, { name: 'Shizuoka', rate: 0.10 }, { name: 'Miyagi', rate: 0.10 },
+  { name: 'Hiroshima', rate: 0.10 }
+];
+
+const SINGAPORE_REGIONS: StateOption[] = [
+  { name: 'Central Region', rate: 0 }, { name: 'East Region', rate: 0 },
+  { name: 'North Region', rate: 0 }, { name: 'North-East Region', rate: 0 },
+  { name: 'West Region', rate: 0 }
+];
+
+const UAE_EMIRATES: StateOption[] = [
+  { name: 'Abu Dhabi', rate: 0 }, { name: 'Dubai', rate: 0 }, { name: 'Sharjah', rate: 0 },
+  { name: 'Ajman', rate: 0 }, { name: 'Umm Al Quwain', rate: 0 }, { name: 'Ras Al Khaimah', rate: 0 },
+  { name: 'Fujairah', rate: 0 }
+];
+
 const CANADA_FEDERAL_BRACKETS: Bracket[] = [
   { upTo: 55867, rate: 0.15 }, { upTo: 111733, rate: 0.205 }, { upTo: 173205, rate: 0.26 },
   { upTo: 246752, rate: 0.29 }, { upTo: Infinity, rate: 0.33 }
@@ -113,6 +133,19 @@ const GERMANY_BRACKETS: Bracket[] = [
   { upTo: 277825, rate: 0.42 }, { upTo: Infinity, rate: 0.45 }
 ];
 
+const JAPAN_BRACKETS: Bracket[] = [
+  { upTo: 1950000, rate: 0.05 }, { upTo: 3300000, rate: 0.10 }, { upTo: 6950000, rate: 0.20 },
+  { upTo: 9000000, rate: 0.23 }, { upTo: 18000000, rate: 0.33 }, { upTo: 40000000, rate: 0.40 },
+  { upTo: Infinity, rate: 0.45 }
+];
+
+const SINGAPORE_BRACKETS: Bracket[] = [
+  { upTo: 20000, rate: 0 }, { upTo: 30000, rate: 0.02 }, { upTo: 40000, rate: 0.035 },
+  { upTo: 80000, rate: 0.07 }, { upTo: 120000, rate: 0.115 }, { upTo: 160000, rate: 0.15 },
+  { upTo: 200000, rate: 0.18 }, { upTo: 240000, rate: 0.19 }, { upTo: 280000, rate: 0.20 },
+  { upTo: 320000, rate: 0.22 }, { upTo: Infinity, rate: 0.24 }
+];
+
 interface CountryTaxConfig {
   states: StateOption[];
   stateLabel: string;
@@ -127,10 +160,19 @@ interface CountryTaxConfig {
   locale: string;
 }
 
-// Countries beyond the original United States / India support. Each entry captures the
-// bracket table, provincial/regional tax treatment, and a secondary levy (self-employment
-// equivalent) used to build the tax summary for that country.
-const COUNTRY_CONFIG: Partial<Record<CountryId, CountryTaxConfig>> = {
+const COUNTRY_CONFIG: Record<CountryId, CountryTaxConfig> = {
+  'United States': {
+    states: US_STATES, stateLabel: 'State', hasStateTax: true,
+    stateTaxLabel: 'State Income Tax (est.)', brackets: [], firmRate: 0.21,
+    extraTaxLabel: 'Self-Employment Tax (est.)', extraTaxBase: 'income', extraTaxRate: 0.153,
+    currency: '$', locale: 'en-US'
+  },
+  'India': {
+    states: [], stateLabel: 'State', hasStateTax: false,
+    stateTaxLabel: 'State Income Tax (est.)', brackets: [], firmRate: 0.25,
+    extraTaxLabel: 'Health & Education Cess (est.)', extraTaxBase: 'tax', extraTaxRate: 0.04,
+    currency: '₹', locale: 'en-IN'
+  },
   'Canada': {
     states: CANADA_PROVINCES, stateLabel: 'Province', hasStateTax: true,
     stateTaxLabel: 'Provincial Income Tax (est.)', brackets: CANADA_FEDERAL_BRACKETS, firmRate: 0.15,
@@ -154,6 +196,30 @@ const COUNTRY_CONFIG: Partial<Record<CountryId, CountryTaxConfig>> = {
     stateTaxLabel: 'State Income Tax (est.)', brackets: GERMANY_BRACKETS, firmRate: 0.15,
     extraTaxLabel: 'Solidarity Surcharge (est.)', extraTaxBase: 'tax', extraTaxRate: 0.055,
     currency: '€', locale: 'de-DE'
+  },
+  'European Union': {
+    states: GERMANY_STATES, stateLabel: 'Member State Region', hasStateTax: false,
+    stateTaxLabel: 'State Income Tax (est.)', brackets: GERMANY_BRACKETS, firmRate: 0.15,
+    extraTaxLabel: 'Solidarity Surcharge (est.)', extraTaxBase: 'tax', extraTaxRate: 0.055,
+    currency: '€', locale: 'de-DE'
+  },
+  'Japan': {
+    states: JAPAN_PREFECTURES, stateLabel: 'Prefecture', hasStateTax: true,
+    stateTaxLabel: 'Inhabitant Tax (est.)', brackets: JAPAN_BRACKETS, firmRate: 0.232,
+    extraTaxLabel: 'Enterprise Tax (est.)', extraTaxBase: 'income', extraTaxRate: 0.05,
+    currency: '¥', locale: 'ja-JP'
+  },
+  'Singapore': {
+    states: SINGAPORE_REGIONS, stateLabel: 'Region', hasStateTax: false,
+    stateTaxLabel: 'Regional Tax (est.)', brackets: SINGAPORE_BRACKETS, firmRate: 0.17,
+    extraTaxLabel: 'Medisave Levy (est.)', extraTaxBase: 'income', extraTaxRate: 0.06,
+    currency: 'S$', locale: 'en-SG'
+  },
+  'United Arab Emirates': {
+    states: UAE_EMIRATES, stateLabel: 'Emirate', hasStateTax: false,
+    stateTaxLabel: 'Emirate Tax (est.)', brackets: [{ upTo: Infinity, rate: 0 }], firmRate: 0.09,
+    extraTaxLabel: 'Corporate Tax (est.)', extraTaxBase: 'income', extraTaxRate: 0,
+    currency: 'AED', locale: 'ar-AE'
   }
 };
 
@@ -303,12 +369,15 @@ function computeProgressiveTax(annualIncome: number, brackets: Bracket[]): numbe
                   class="w-full px-4 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                   [class.text-slate-400]="!country" [class.text-slate-900]="!!country">
                   <option value="" disabled class="text-slate-400">Select country</option>
-                  <option value="United States" class="text-slate-900">United States</option>
                   <option value="India" class="text-slate-900">India</option>
-                  <option value="Canada" class="text-slate-900">Canada</option>
+                  <option value="United States" class="text-slate-900">United States</option>
                   <option value="United Kingdom" class="text-slate-900">United Kingdom</option>
+                  <option value="European Union" class="text-slate-900">European Union</option>
+                  <option value="Japan" class="text-slate-900">Japan</option>
+                  <option value="Canada" class="text-slate-900">Canada</option>
                   <option value="Australia" class="text-slate-900">Australia</option>
-                  <option value="Germany" class="text-slate-900">Germany</option>
+                  <option value="Singapore" class="text-slate-900">Singapore</option>
+                  <option value="United Arab Emirates" class="text-slate-900">United Arab Emirates</option>
                 </select>
               </div>
               <div>
@@ -761,8 +830,10 @@ export class TaxEstimatorPage {
   constructor() {
     this.quarter = this.quarterOptions()[Math.floor((new Date().getMonth()) / 3)];
     this.taxEstimateService.loadEstimates();
+    this.taxEstimateService.loadCalendar();
     this.checkAndAutoNotify();
   }
+
 
   protected stateOptions(): StateOption[] {
     if (this.country === 'India') return this.indiaStates;
@@ -984,9 +1055,14 @@ export class TaxEstimatorPage {
     switch (country) {
       case 'India': return '₹';
       case 'United Kingdom': return '£';
+      case 'European Union':
+      case 'Germany': return '€';
+      case 'Japan': return '¥';
       case 'Canada': return 'CA$';
       case 'Australia': return 'A$';
-      case 'Germany': return '€';
+      case 'Singapore': return 'S$';
+      case 'United Arab Emirates':
+      case 'UAE': return 'AED';
       default: return '$';
     }
   }

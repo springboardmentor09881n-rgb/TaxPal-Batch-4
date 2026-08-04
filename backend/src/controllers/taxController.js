@@ -21,20 +21,12 @@ const US_STATES = [
     { name: 'Wisconsin', rate: 0.053 }, { name: 'Wyoming', rate: 0 }, { name: 'District of Columbia', rate: 0.0895 }
 ];
 
-const FEDERAL_BRACKETS = {
-    'Single': [
-        { upTo: 11925, rate: 0.10 }, { upTo: 48475, rate: 0.12 }, { upTo: 103350, rate: 0.22 },
-        { upTo: 197300, rate: 0.24 }, { upTo: 250525, rate: 0.32 }, { upTo: 626350, rate: 0.35 },
-        { upTo: Infinity, rate: 0.37 }
-    ],
+const normalizeStatusKey = (status = '') => status.toUpperCase().trim().replace(/\s+/g, '_');
+
+const US_FEDERAL_BRACKETS = {
     'SINGLE': [
         { upTo: 11925, rate: 0.10 }, { upTo: 48475, rate: 0.12 }, { upTo: 103350, rate: 0.22 },
         { upTo: 197300, rate: 0.24 }, { upTo: 250525, rate: 0.32 }, { upTo: 626350, rate: 0.35 },
-        { upTo: Infinity, rate: 0.37 }
-    ],
-    'Married Filing Jointly': [
-        { upTo: 23850, rate: 0.10 }, { upTo: 96950, rate: 0.12 }, { upTo: 206700, rate: 0.22 },
-        { upTo: 394600, rate: 0.24 }, { upTo: 501050, rate: 0.32 }, { upTo: 751600, rate: 0.35 },
         { upTo: Infinity, rate: 0.37 }
     ],
     'MARRIED_FILING_JOINTLY': [
@@ -42,19 +34,9 @@ const FEDERAL_BRACKETS = {
         { upTo: 394600, rate: 0.24 }, { upTo: 501050, rate: 0.32 }, { upTo: 751600, rate: 0.35 },
         { upTo: Infinity, rate: 0.37 }
     ],
-    'Head of Household': [
-        { upTo: 17000, rate: 0.10 }, { upTo: 64850, rate: 0.12 }, { upTo: 103350, rate: 0.22 },
-        { upTo: 197300, rate: 0.24 }, { upTo: 250500, rate: 0.32 }, { upTo: 626350, rate: 0.35 },
-        { upTo: Infinity, rate: 0.37 }
-    ],
     'HEAD_OF_HOUSEHOLD': [
         { upTo: 17000, rate: 0.10 }, { upTo: 64850, rate: 0.12 }, { upTo: 103350, rate: 0.22 },
         { upTo: 197300, rate: 0.24 }, { upTo: 250500, rate: 0.32 }, { upTo: 626350, rate: 0.35 },
-        { upTo: Infinity, rate: 0.37 }
-    ],
-    'Married Filing Separately': [
-        { upTo: 11925, rate: 0.10 }, { upTo: 48475, rate: 0.12 }, { upTo: 103350, rate: 0.22 },
-        { upTo: 197300, rate: 0.24 }, { upTo: 250525, rate: 0.32 }, { upTo: 375800, rate: 0.35 },
         { upTo: Infinity, rate: 0.37 }
     ],
     'MARRIED_FILING_SEPARATELY': [
@@ -71,6 +53,79 @@ const INDIA_SLABS = [
     { upTo: 1200000, rate: 0.15 },
     { upTo: 1500000, rate: 0.20 },
     { upTo: Infinity, rate: 0.30 }
+];
+
+const UK_BRACKETS = [
+    { upTo: 12570, rate: 0 },
+    { upTo: 50270, rate: 0.20 },
+    { upTo: 125140, rate: 0.40 },
+    { upTo: Infinity, rate: 0.45 }
+];
+
+const UK_SCOTLAND_BRACKETS = [
+    { upTo: 12570, rate: 0 },
+    { upTo: 14876, rate: 0.19 },
+    { upTo: 26561, rate: 0.20 },
+    { upTo: 43662, rate: 0.21 },
+    { upTo: 75000, rate: 0.42 },
+    { upTo: 125140, rate: 0.45 },
+    { upTo: Infinity, rate: 0.47 }
+];
+
+const GERMANY_BRACKETS = [
+    { upTo: 11604, rate: 0 },
+    { upTo: 17005, rate: 0.14 },
+    { upTo: 66760, rate: 0.24 },
+    { upTo: 277825, rate: 0.42 },
+    { upTo: Infinity, rate: 0.45 }
+];
+
+const JAPAN_BRACKETS = [
+    { upTo: 1950000, rate: 0.05 },
+    { upTo: 3300000, rate: 0.10 },
+    { upTo: 6950000, rate: 0.20 },
+    { upTo: 9000000, rate: 0.23 },
+    { upTo: 18000000, rate: 0.33 },
+    { upTo: 40000000, rate: 0.40 },
+    { upTo: Infinity, rate: 0.45 }
+];
+
+const CANADA_FEDERAL_BRACKETS = [
+    { upTo: 55867, rate: 0.15 },
+    { upTo: 111733, rate: 0.205 },
+    { upTo: 173205, rate: 0.26 },
+    { upTo: 246752, rate: 0.29 },
+    { upTo: Infinity, rate: 0.33 }
+];
+
+const CANADA_PROVINCES = [
+    { name: 'Alberta', rate: 0.10 }, { name: 'British Columbia', rate: 0.128 }, { name: 'Manitoba', rate: 0.174 },
+    { name: 'New Brunswick', rate: 0.197 }, { name: 'Newfoundland and Labrador', rate: 0.218 },
+    { name: 'Northwest Territories', rate: 0.1405 }, { name: 'Nova Scotia', rate: 0.21 },
+    { name: 'Nunavut', rate: 0.115 }, { name: 'Ontario', rate: 0.1316 }, { name: 'Prince Edward Island', rate: 0.188 },
+    { name: 'Quebec', rate: 0.2575 }, { name: 'Saskatchewan', rate: 0.145 }, { name: 'Yukon', rate: 0.128 }
+];
+
+const AUSTRALIA_BRACKETS = [
+    { upTo: 18200, rate: 0 },
+    { upTo: 45000, rate: 0.16 },
+    { upTo: 135000, rate: 0.30 },
+    { upTo: 190000, rate: 0.37 },
+    { upTo: Infinity, rate: 0.45 }
+];
+
+const SINGAPORE_BRACKETS = [
+    { upTo: 20000, rate: 0 },
+    { upTo: 30000, rate: 0.02 },
+    { upTo: 40000, rate: 0.035 },
+    { upTo: 80000, rate: 0.07 },
+    { upTo: 120000, rate: 0.115 },
+    { upTo: 160000, rate: 0.15 },
+    { upTo: 200000, rate: 0.18 },
+    { upTo: 240000, rate: 0.19 },
+    { upTo: 280000, rate: 0.20 },
+    { upTo: 320000, rate: 0.22 },
+    { upTo: Infinity, rate: 0.24 }
 ];
 
 const SELF_EMPLOYMENT_TAX_RATE = 0.153;
@@ -96,26 +151,67 @@ const calculateTax = (taxableIncome, filingStatus, country = 'United States', st
     const annualizedNet = taxableIncome * 4;
     let federalTax = 0;
     let stateTax = 0;
-    let selfEmploymentTax = 0;
+    let extraTax = 0;
 
-    if (country === 'India') {
+    const normCountry = (country || 'United States').trim();
+    const isFirm = filingStatus === 'FIRM' || filingStatus === 'Firm';
+
+    if (normCountry === 'India') {
         const annualTax = computeProgressiveTax(annualizedNet, INDIA_SLABS);
         federalTax = annualTax / 4;
         stateTax = 0;
-        selfEmploymentTax = 0;
+        extraTax = federalTax * 0.04; // Health & Education Cess
+    } else if (normCountry === 'United Kingdom') {
+        const brackets = (state || '').toLowerCase() === 'scotland' ? UK_SCOTLAND_BRACKETS : UK_BRACKETS;
+        const annualTax = isFirm ? annualizedNet * 0.25 : computeProgressiveTax(annualizedNet, brackets);
+        federalTax = annualTax / 4;
+        stateTax = 0;
+        extraTax = isFirm ? 0 : taxableIncome * 0.06; // National Insurance
+    } else if (normCountry === 'European Union' || normCountry === 'Germany') {
+        const annualTax = isFirm ? annualizedNet * 0.15 : computeProgressiveTax(annualizedNet, GERMANY_BRACKETS);
+        federalTax = annualTax / 4;
+        stateTax = 0;
+        extraTax = federalTax * 0.055; // Solidarity Surcharge
+    } else if (normCountry === 'Japan') {
+        const annualTax = isFirm ? annualizedNet * 0.232 : computeProgressiveTax(annualizedNet, JAPAN_BRACKETS);
+        federalTax = annualTax / 4;
+        stateTax = taxableIncome * 0.10; // Inhabitant Tax
+        extraTax = isFirm ? 0 : taxableIncome * 0.05; // Enterprise Tax
+    } else if (normCountry === 'Canada') {
+        const annualTax = isFirm ? annualizedNet * 0.15 : computeProgressiveTax(annualizedNet, CANADA_FEDERAL_BRACKETS);
+        federalTax = annualTax / 4;
+        const stateObj = CANADA_PROVINCES.find(s => s.name.toLowerCase() === (state || '').toLowerCase());
+        stateTax = taxableIncome * (stateObj ? stateObj.rate : 0.13);
+        extraTax = isFirm ? 0 : taxableIncome * 0.119; // CPP
+    } else if (normCountry === 'Australia') {
+        const annualTax = isFirm ? annualizedNet * 0.25 : computeProgressiveTax(annualizedNet, AUSTRALIA_BRACKETS);
+        federalTax = annualTax / 4;
+        stateTax = 0;
+        extraTax = isFirm ? 0 : taxableIncome * 0.02; // Medicare Levy
+    } else if (normCountry === 'Singapore') {
+        const annualTax = isFirm ? annualizedNet * 0.17 : computeProgressiveTax(annualizedNet, SINGAPORE_BRACKETS);
+        federalTax = annualTax / 4;
+        stateTax = 0;
+        extraTax = isFirm ? 0 : taxableIncome * 0.06; // Medisave Levy
+    } else if (normCountry === 'United Arab Emirates' || normCountry === 'UAE') {
+        federalTax = isFirm ? Math.max(0, annualizedNet - 375000) * 0.09 / 4 : 0;
+        stateTax = 0;
+        extraTax = 0;
     } else {
-        const brackets = FEDERAL_BRACKETS[filingStatus] || FEDERAL_BRACKETS['Single'];
-        const annualFederalTax = computeProgressiveTax(annualizedNet, brackets);
+        // Default to United States
+        const statusKey = normalizeStatusKey(filingStatus);
+        const brackets = US_FEDERAL_BRACKETS[statusKey] || US_FEDERAL_BRACKETS['SINGLE'];
+        const annualFederalTax = isFirm ? annualizedNet * 0.21 : computeProgressiveTax(annualizedNet, brackets);
         federalTax = annualFederalTax / 4;
 
         const stateObj = US_STATES.find(s => s.name.toLowerCase() === (state || '').toLowerCase());
         const stateRate = stateObj ? stateObj.rate : 0;
         stateTax = taxableIncome * stateRate;
 
-        selfEmploymentTax = taxableIncome * SELF_EMPLOYMENT_TAX_RATE;
+        extraTax = isFirm ? 0 : taxableIncome * SELF_EMPLOYMENT_TAX_RATE;
     }
 
-    return federalTax + stateTax + selfEmploymentTax;
+    return federalTax + stateTax + extraTax;
 };
 
 // Calculate and save tax estimate
@@ -269,3 +365,19 @@ exports.getTaxCalendar = async (req, res) => {
         res.status(500).json({ success: false, message: "Server Error" });
     }
 };
+
+exports.deleteTaxEstimate = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const userId = req.user.id;
+        const deleted = await TaxEstimate.findOneAndDelete({ _id: id, userId });
+        if (!deleted) {
+            return res.status(404).json({ success: false, message: "Tax estimate not found" });
+        }
+        res.status(200).json({ success: true, message: "Tax estimate deleted successfully" });
+    } catch (error) {
+        console.error("Error deleting tax estimate:", error);
+        res.status(500).json({ success: false, message: "Server Error", error: error.message });
+    }
+};
+
