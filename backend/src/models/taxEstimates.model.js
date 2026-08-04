@@ -30,7 +30,8 @@ const taxEstimateSchema = new mongoose.Schema({
     },
     state:{
         type:String,
-        required:true,
+        required:false,
+        default: '',
     },
     filingStatus:{
         type:String,
@@ -73,6 +74,6 @@ const taxEstimateSchema = new mongoose.Schema({
 },{timestamps:true}
 );
 
-taxEstimateSchema.index({userId:1, quarter:1, dueDate:1},{unique:true});
+taxEstimateSchema.index({userId:1, quarter:1, country:1},{unique:true});
 
 module.exports=mongoose.model("taxEstimates",taxEstimateSchema);

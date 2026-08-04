@@ -22,19 +22,9 @@ const US_STATES = [
 ];
 
 const FEDERAL_BRACKETS = {
-    'Single': [
-        { upTo: 11925, rate: 0.10 }, { upTo: 48475, rate: 0.12 }, { upTo: 103350, rate: 0.22 },
-        { upTo: 197300, rate: 0.24 }, { upTo: 250525, rate: 0.32 }, { upTo: 626350, rate: 0.35 },
-        { upTo: Infinity, rate: 0.37 }
-    ],
     'SINGLE': [
         { upTo: 11925, rate: 0.10 }, { upTo: 48475, rate: 0.12 }, { upTo: 103350, rate: 0.22 },
         { upTo: 197300, rate: 0.24 }, { upTo: 250525, rate: 0.32 }, { upTo: 626350, rate: 0.35 },
-        { upTo: Infinity, rate: 0.37 }
-    ],
-    'Married Filing Jointly': [
-        { upTo: 23850, rate: 0.10 }, { upTo: 96950, rate: 0.12 }, { upTo: 206700, rate: 0.22 },
-        { upTo: 394600, rate: 0.24 }, { upTo: 501050, rate: 0.32 }, { upTo: 751600, rate: 0.35 },
         { upTo: Infinity, rate: 0.37 }
     ],
     'MARRIED_FILING_JOINTLY': [
@@ -42,25 +32,19 @@ const FEDERAL_BRACKETS = {
         { upTo: 394600, rate: 0.24 }, { upTo: 501050, rate: 0.32 }, { upTo: 751600, rate: 0.35 },
         { upTo: Infinity, rate: 0.37 }
     ],
-    'Head of Household': [
-        { upTo: 17000, rate: 0.10 }, { upTo: 64850, rate: 0.12 }, { upTo: 103350, rate: 0.22 },
-        { upTo: 197300, rate: 0.24 }, { upTo: 250500, rate: 0.32 }, { upTo: 626350, rate: 0.35 },
-        { upTo: Infinity, rate: 0.37 }
-    ],
     'HEAD_OF_HOUSEHOLD': [
         { upTo: 17000, rate: 0.10 }, { upTo: 64850, rate: 0.12 }, { upTo: 103350, rate: 0.22 },
         { upTo: 197300, rate: 0.24 }, { upTo: 250500, rate: 0.32 }, { upTo: 626350, rate: 0.35 },
-        { upTo: Infinity, rate: 0.37 }
-    ],
-    'Married Filing Separately': [
-        { upTo: 11925, rate: 0.10 }, { upTo: 48475, rate: 0.12 }, { upTo: 103350, rate: 0.22 },
-        { upTo: 197300, rate: 0.24 }, { upTo: 250525, rate: 0.32 }, { upTo: 375800, rate: 0.35 },
         { upTo: Infinity, rate: 0.37 }
     ],
     'MARRIED_FILING_SEPARATELY': [
         { upTo: 11925, rate: 0.10 }, { upTo: 48475, rate: 0.12 }, { upTo: 103350, rate: 0.22 },
         { upTo: 197300, rate: 0.24 }, { upTo: 250525, rate: 0.32 }, { upTo: 375800, rate: 0.35 },
         { upTo: Infinity, rate: 0.37 }
+    ],
+    // Flat corporate/firm rate — not progressive
+    'FIRM': [
+        { upTo: Infinity, rate: 0.21 }
     ]
 };
 
@@ -102,9 +86,17 @@ const calculateTax = (taxableIncome, filingStatus, country = 'United States', st
         const annualTax = computeProgressiveTax(annualizedNet, INDIA_SLABS);
         federalTax = annualTax / 4;
         stateTax = 0;
+        // Health & Education Cess: 4% of the computed income tax
+        selfEmploymentTax = federalTax * 0.04;
+    } else if (filingStatus === 'FIRM') {
+        // Flat corporate/firm rate: 21% federal, no self-employment tax
+        federalTax = (annualizedNet * 0.21) / 4;
+        const stateObj = US_STATES.find(s => s.name.toLowerCase() === (state || '').toLowerCase());
+        const stateRate = stateObj ? stateObj.rate : 0;
+        stateTax = taxableIncome * stateRate;
         selfEmploymentTax = 0;
     } else {
-        const brackets = FEDERAL_BRACKETS[filingStatus] || FEDERAL_BRACKETS['Single'];
+        const brackets = FEDERAL_BRACKETS[filingStatus] || FEDERAL_BRACKETS['SINGLE'];
         const annualFederalTax = computeProgressiveTax(annualizedNet, brackets);
         federalTax = annualFederalTax / 4;
 
@@ -267,3 +259,45 @@ exports.getTaxCalendar = async (req, res) => {
         res.status(500).json({ success: false, message: "Server Error" });
     }
 };
+
+exports.deleteTaxEstimate = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { id } = req.params;
+        const result = await TaxEstimate.findOneAndDelete({ _id: id, userId });
+        if (!result) {
+            return res.status(404).json({ success: false, message: "Tax estimate not found" });
+        }
+        res.status(200).json({ success: true, message: "Tax estimate deleted successfully" });
+    } catch (error) {
+        console.error("Error deleting tax estimate:", error);
+        res.status(500).json({ success: false, message: "Server Error" });
+    }
+};
+
+exports.getTaxAlerts = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const alerts = await Alert.find({ userId, type: "TAX_DUE" }).sort({ alertDate: -1 });
+        res.status(200).json({ success: true, data: alerts });
+    } catch (error) {
+        console.error("Error fetching tax alerts:", error);
+        res.status(500).json({ success: false, message: "Server Error" });
+    }
+};
+
+exports.deleteTaxAlert = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { id } = req.params;
+        const result = await Alert.findOneAndDelete({ _id: id, userId });
+        if (!result) {
+            return res.status(404).json({ success: false, message: "Alert not found" });
+        }
+        res.status(200).json({ success: true, message: "Alert deleted successfully" });
+    } catch (error) {
+        console.error("Error deleting tax alert:", error);
+        res.status(500).json({ success: false, message: "Server Error" });
+    }
+};
+
