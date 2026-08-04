@@ -49,3 +49,28 @@ export interface Category {
   name: string;
   color: string;
 }
+
+export type TaxEstimateFilingStatus =
+  | 'SINGLE'
+  | 'MARRIED_FILING_JOINTLY'
+  | 'MARRIED_FILING_SEPARATELY'
+  | 'HEAD_OF_HOUSEHOLD'
+  | 'FIRM';
+
+export interface TaxEstimate {
+  _id?: string;
+  userId?: string;
+  country: string;
+  quarter: 'Q1' | 'Q2' | 'Q3' | 'Q4';
+  estimatedTax: number;
+  dueDate: string;
+  state: string;
+  filingStatus: TaxEstimateFilingStatus;
+  grossIncomeForQuarter: number;
+  businessExpenses: number;
+  retirementContributions: number;
+  healthInsurancePremiums: number;
+  homeOfficeDeductions: number;
+  createdAt?: string;
+  updatedAt?: string;
+}

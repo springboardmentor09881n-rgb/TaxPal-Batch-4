@@ -6,6 +6,7 @@ import { DashboardPageComponent } from './pages/dashboard-page/dashboard-page';
 import { TransactionsPageShellComponent } from './pages/transactions-page/transactions-page';
 import { BudgetsPageShellComponent } from './pages/budgets-page/budgets-page';
 import { SettingsPageComponent } from './pages/settings-page/settings-page';
+import { TaxEstimatorPageComponent } from './pages/tax-estimator-page/tax-estimator-page';
 import { ForgotPasswordComponent } from './pages/forgot-password-page/forgot-password';
 import { ResetPasswordComponent } from './pages/reset-password-page/reset-password';
 import { authGuard } from './auth.guard';
@@ -24,6 +25,7 @@ export const routes: Routes = [
       { path: 'dashboard', component: DashboardPageComponent },
       { path: 'transactions', component: TransactionsPageShellComponent },
       { path: 'budgets', component: BudgetsPageShellComponent },
+      { path: 'tax-estimator', component: TaxEstimatorPageComponent },
       { path: 'settings', component: SettingsPageComponent },
     ]
   },
