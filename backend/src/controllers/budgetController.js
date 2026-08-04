@@ -6,14 +6,29 @@ async function formatBudgetWithSpent(budgetDoc, userId) {
   const budgetObj = budgetDoc.toObject ? budgetDoc.toObject() : { ...budgetDoc };
   try {
     let year, month;
-    if (budgetObj.month.includes('-')) {
-      const parts = budgetObj.month.split('-');
+    const rawMonth = (budgetObj.month || '').trim();
+
+    if (rawMonth.includes('-')) {
+      const parts = rawMonth.split('-');
       year = parseInt(parts[0], 10);
-      month = parseInt(parts[1], 10) - 1; // 0-indexed
+      month = parseInt(parts[1], 10) - 1; // 0-indexed month
     } else {
-      const tempDate = new Date(budgetObj.month);
-      year = tempDate.getFullYear();
-      month = tempDate.getMonth();
+      const tempDate = new Date(rawMonth);
+      if (!isNaN(tempDate.getTime())) {
+        year = tempDate.getFullYear();
+        month = tempDate.getMonth();
+      } else {
+        const now = new Date();
+        year = now.getFullYear();
+        month = now.getMonth();
+      }
+    }
+
+    // Default fallbacks if parsing resulted in NaN
+    if (isNaN(year) || isNaN(month)) {
+      const now = new Date();
+      year = now.getFullYear();
+      month = now.getMonth();
     }
 
     const startOfMonth = new Date(year, month, 1, 0, 0, 0, 0);
@@ -26,12 +41,12 @@ async function formatBudgetWithSpent(budgetDoc, userId) {
       date: { $gte: startOfMonth, $lte: endOfMonth }
     });
 
-    const spent = transactions.reduce((acc, curr) => acc + curr.amount, 0);
+    const spent = transactions.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
     budgetObj.spent = spent;
-    budgetObj.remaining = budgetObj.budget_amount - spent;
+    budgetObj.remaining = (Number(budgetObj.budget_amount) || 0) - spent;
   } catch (err) {
     budgetObj.spent = 0;
-    budgetObj.remaining = budgetObj.budget_amount;
+    budgetObj.remaining = Number(budgetObj.budget_amount) || 0;
   }
   return budgetObj;
 }
@@ -45,7 +60,7 @@ exports.getBudgets = async (req, res) => {
     const budgetsWithSpent = await Promise.all(budgets.map(b => formatBudgetWithSpent(b, req.user.id)));
     res.status(200).json(budgetsWithSpent);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching budgets', error: error.message });
+    res.status(500).json({ success: false, message: 'Error fetching budgets', error: error.message });
   }
 };
 
@@ -58,7 +73,7 @@ exports.createBudget = async (req, res) => {
   try {
     const existingBudget = await Budget.findOne({ userId: req.user.id, category, month });
     if (existingBudget) {
-      return res.status(400).json({ message: 'Budget for this category and month already exists' });
+      return res.status(400).json({ success: false, message: 'Budget for this category and month already exists' });
     }
 
     const budget = new Budget({
@@ -73,7 +88,7 @@ exports.createBudget = async (req, res) => {
     const formatted = await formatBudgetWithSpent(savedBudget, req.user.id);
     res.status(201).json(formatted);
   } catch (error) {
-    res.status(500).json({ message: 'Error creating budget', error: error.message });
+    res.status(500).json({ success: false, message: 'Error creating budget', error: error.message });
   }
 };
 
@@ -87,7 +102,7 @@ exports.updateBudget = async (req, res) => {
     let budget = await Budget.findOne({ _id: req.params.id, userId: req.user.id });
 
     if (!budget) {
-      return res.status(404).json({ message: 'Budget not found' });
+      return res.status(404).json({ success: false, message: 'Budget not found' });
     }
 
     budget.category = category || budget.category;
@@ -99,7 +114,7 @@ exports.updateBudget = async (req, res) => {
     const formatted = await formatBudgetWithSpent(updatedBudget, req.user.id);
     res.status(200).json(formatted);
   } catch (error) {
-    res.status(500).json({ message: 'Error updating budget', error: error.message });
+    res.status(500).json({ success: false, message: 'Error updating budget', error: error.message });
   }
 };
 
@@ -111,11 +126,11 @@ exports.deleteBudget = async (req, res) => {
     const budget = await Budget.findOneAndDelete({ _id: req.params.id, userId: req.user.id });
 
     if (!budget) {
-      return res.status(404).json({ message: 'Budget not found' });
+      return res.status(404).json({ success: false, message: 'Budget not found' });
     }
 
-    res.status(200).json({ message: 'Budget removed' });
+    res.status(200).json({ success: true, message: 'Budget removed' });
   } catch (error) {
-    res.status(500).json({ message: 'Error deleting budget', error: error.message });
+    res.status(500).json({ success: false, message: 'Error deleting budget', error: error.message });
   }
 };
