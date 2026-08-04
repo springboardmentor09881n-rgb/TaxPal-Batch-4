@@ -125,6 +125,7 @@ exports.calculateTaxEstimate = async (req, res) => {
             country,
             state,
             quarter,
+            year: requestYear,
             filingStatus,
             grossIncomeForQuarter,
             businessExpenses,
@@ -146,36 +147,36 @@ exports.calculateTaxEstimate = async (req, res) => {
         // Calculate tax based on country, state, filing status, and slabs
         const estimatedTax = calculateTax(taxableIncome, filingStatus, country, state);
         
-        // Determine Due Date based on Quarter
-        const currentYear = new Date().getFullYear();
+        // Determine Due Date based on Quarter and Tax Year
+        const taxYear = requestYear ? Number(requestYear) : new Date().getFullYear();
         let dueDate;
         let reminderDate;
         
         switch(quarter) {
             case 'Q1': 
-                dueDate = new Date(currentYear, 3, 15); // April 15
-                reminderDate = new Date(currentYear, 3, 1); // April 1
+                dueDate = new Date(taxYear, 3, 15); // April 15 of taxYear
+                reminderDate = new Date(taxYear, 3, 1); // April 1
                 break;
             case 'Q2':
-                dueDate = new Date(currentYear, 5, 15); // June 15
-                reminderDate = new Date(currentYear, 5, 1); // June 1
+                dueDate = new Date(taxYear, 5, 15); // June 15 of taxYear
+                reminderDate = new Date(taxYear, 5, 1); // June 1
                 break;
             case 'Q3':
-                dueDate = new Date(currentYear, 8, 15); // Sept 15
-                reminderDate = new Date(currentYear, 8, 1); // Sept 1
+                dueDate = new Date(taxYear, 8, 15); // Sept 15 of taxYear
+                reminderDate = new Date(taxYear, 8, 1); // Sept 1
                 break;
             case 'Q4':
-                dueDate = new Date(currentYear + 1, 0, 15); // Jan 15 next year
-                reminderDate = new Date(currentYear + 1, 0, 1); // Jan 1 next year
+                dueDate = new Date(taxYear + 1, 0, 15); // Jan 15 of taxYear + 1
+                reminderDate = new Date(taxYear + 1, 0, 1); // Jan 1 of taxYear + 1
                 break;
             default:
                 dueDate = new Date();
                 reminderDate = new Date();
         }
 
-        // Upsert Tax Estimate
+        // Upsert Tax Estimate matching the compound unique index { userId, quarter, dueDate }
         const taxEstimate = await TaxEstimate.findOneAndUpdate(
-            { userId, quarter, country },
+            { userId, quarter, dueDate },
             {
                 userId,
                 country,
@@ -193,13 +194,14 @@ exports.calculateTaxEstimate = async (req, res) => {
             { new: true, upsert: true, runValidators: true }
         );
         
-        // Schedule Alert
+        // Schedule Alert with specific tax year message to avoid multi-year collisions
+        const alertMessage = `Reminder: ${quarter} ${taxYear} Estimated Tax Payment`;
         await Alert.findOneAndUpdate(
-            { userId, type: "TAX_DUE", message: { $regex: quarter } },
+            { userId, type: "TAX_DUE", message: alertMessage },
             {
                 userId,
                 type: "TAX_DUE",
-                message: `Reminder: ${quarter} Estimated Tax Payment`,
+                message: alertMessage,
                 alertDate: reminderDate
             },
             { upsert: true }
