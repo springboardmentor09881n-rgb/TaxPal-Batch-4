@@ -261,7 +261,7 @@ interface CategoryTotal {
             <tbody class="divide-y divide-slate-100">
               @for (tx of recentTransactions(); track $index) {
                 <tr class="hover:bg-slate-50/50">
-                  <td class="py-3.5 text-slate-500 font-medium">{{ tx.date }}</td>
+                  <td class="py-3.5 text-slate-500 font-medium">{{ formatDate(tx.date) }}</td>
                   <td class="py-3.5 font-semibold text-slate-800">{{ tx.description }}</td>
                   <td class="py-3.5 text-slate-500">
                     <span class="inline-flex items-center gap-1.5">
@@ -605,6 +605,11 @@ export class Dashboard implements OnInit {
     const cats = this.dataService.categories();
     const match = cats.find(c => c.name === catName && c.type === type);
     return match ? match.color : '#64748b';
+  }
+
+  protected formatDate(dateStr: string): string {
+    if (!dateStr) return '';
+    return new Date(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
   }
 
   protected categoriesForType = computed(() => {
