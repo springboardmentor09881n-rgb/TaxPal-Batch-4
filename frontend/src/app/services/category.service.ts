@@ -1,9 +1,11 @@
 import { Injectable, signal, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Category } from '../models';
-import { Observable } from 'rxjs';
-import { tap } from 'rxjs/operators';
+import { Observable, of } from 'rxjs';
+import { tap, catchError } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
+import { DataService } from './data.service';
+import { ToastService } from './toast.service';
 
 const DEFAULT_CATEGORIES: Category[] = [
   // Expense Categories
@@ -31,20 +33,34 @@ const DEFAULT_CATEGORIES: Category[] = [
 @Injectable({ providedIn: 'root' })
 export class CategoryService {
   private http = inject(HttpClient);
+  private dataService = inject(DataService);
+  private toastService = inject(ToastService);
 
-  readonly categories = signal<Category[]>([]);
+  readonly categories = this.dataService.categories;
 
   private getAuthOptions() {
-    const token = localStorage.getItem('tp_token');
+    const token = localStorage.getItem('tp_token') || sessionStorage.getItem('tp_token');
     return token ? { headers: { Authorization: `Bearer ${token}` } } : {};
   }
 
   loadCategories(): void {
-    this.http.get<Category[]>(`${environment.apiUrl}/categories`, this.getAuthOptions()).subscribe({
+    this.http.get<Category[]>(`${environment.apiUrl}/categories`, this.getAuthOptions()).pipe(
+      catchError((err) => {
+        this.toastService.showError('Failed to load categories from backend. Using local backup.');
+        const userId = this.dataService.currentUser()?.id;
+        if (userId) {
+          const local = JSON.parse(localStorage.getItem('tp_categories') || '[]');
+          this.dataService.categories.set(local.filter((c: any) => c.userId === userId));
+        }
+        return of([]);
+      })
+    ).subscribe({
       next: (res) => {
-        this.categories.set(res || []);
-      },
-      error: (err) => console.error('Failed to load categories', err)
+        if (res && res.length > 0) {
+          this.dataService.categories.set(res);
+          localStorage.setItem('tp_categories', JSON.stringify(res));
+        }
+      }
     });
   }
 
@@ -80,8 +96,16 @@ export class CategoryService {
   addCategory(category: any): Observable<Category> {
     return this.http.post<Category>(`${environment.apiUrl}/categories`, category, this.getAuthOptions()).pipe(
       tap((newCat) => {
-        const current = this.categories();
-        this.categories.set([...current, newCat]);
+        const current = this.dataService.categories();
+        this.dataService.categories.set([...current, newCat]);
+
+        // Sync localStorage
+        const local = JSON.parse(localStorage.getItem('tp_categories') || '[]');
+        localStorage.setItem('tp_categories', JSON.stringify([...local, newCat]));
+      }),
+      catchError((err) => {
+        this.toastService.showError('Failed to save category on server.');
+        throw err;
       })
     );
   }
@@ -89,8 +113,17 @@ export class CategoryService {
   updateCategory(id: string, category: any): Observable<Category> {
     return this.http.put<Category>(`${environment.apiUrl}/categories/${id}`, category, this.getAuthOptions()).pipe(
       tap((updatedCat) => {
-        const current = this.categories().map(c => c._id === id || c.id === id ? { ...c, ...updatedCat } : c);
-        this.categories.set(current);
+        const current = this.dataService.categories().map(c => c._id === id || c.id === id ? { ...c, ...updatedCat } : c);
+        this.dataService.categories.set(current);
+
+        // Sync localStorage
+        const local = JSON.parse(localStorage.getItem('tp_categories') || '[]');
+        const updatedLocal = local.map((c: any) => (c._id === id || c.id === id) ? { ...c, ...updatedCat } : c);
+        localStorage.setItem('tp_categories', JSON.stringify(updatedLocal));
+      }),
+      catchError((err) => {
+        this.toastService.showError('Failed to update category on server.');
+        throw err;
       })
     );
   }
@@ -98,7 +131,15 @@ export class CategoryService {
   deleteCategory(id: string): Observable<any> {
     return this.http.delete<any>(`${environment.apiUrl}/categories/${id}`, this.getAuthOptions()).pipe(
       tap(() => {
-        this.categories.set(this.categories().filter((item: Category) => item._id !== id && item.id !== id));
+        this.dataService.categories.set(this.dataService.categories().filter((item: Category) => item._id !== id && item.id !== id));
+
+        // Sync localStorage
+        const local = JSON.parse(localStorage.getItem('tp_categories') || '[]');
+        localStorage.setItem('tp_categories', JSON.stringify(local.filter((item: any) => item._id !== id && item.id !== id)));
+      }),
+      catchError((err) => {
+        this.toastService.showError('Failed to delete category on server.');
+        throw err;
       })
     );
   }
@@ -137,21 +178,18 @@ export class CategoryService {
     // Try matching rules
     for (const rule of rules) {
       if (rule.keywords.some(kw => text.includes(kw))) {
-        // Find closest matching available category name case-insensitively
         const match = categoryNames.find(c => c.toLowerCase() === rule.category.toLowerCase());
         if (match) return match;
       }
     }
 
-    // Fallback: Check if description explicitly contains any available category name directly
+    // Fallback
     for (const catName of categoryNames) {
       if (catName.toLowerCase() !== 'other' && text.includes(catName.toLowerCase())) {
         return catName;
       }
     }
 
-    // If no match was found, suggest 'Other' if available
-    const otherMatch = categoryNames.find(c => c.toLowerCase() === 'other');
-    return otherMatch || null;
+    return null;
   }
 }
