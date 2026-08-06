@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { TaxNotificationPanel, NotificationPriority } from '../tax-notification-panel/tax-notification-panel';
 import { TaxEstimateService } from '../../services/tax-estimate.service';
 import { TaxEstimate, TaxEstimateFilingStatus } from '../../models';
+import { CurrencyFormatterDirective } from '../../directives/currency-formatter.directive';
 
 interface Bracket {
   upTo: number;
@@ -287,7 +288,7 @@ function computeProgressiveTax(annualIncome: number, brackets: Bracket[]): numbe
 @Component({
   selector: 'app-tax-estimator',
   standalone: true,
-  imports: [FormsModule, TaxNotificationPanel],
+  imports: [FormsModule, TaxNotificationPanel, CurrencyFormatterDirective],
   template: `
     <div class="space-y-2">
       @if (showCalcToast()) {
@@ -454,7 +455,7 @@ function computeProgressiveTax(annualIncome: number, brackets: Bracket[]): numbe
               <label class="block text-xs font-semibold text-slate-600 uppercase mb-2">Gross Income for Quarter</label>
               <div class="relative">
                 <span class="absolute left-3.5 top-2.5 text-xs text-slate-400 font-bold">{{ currencySymbol() }}</span>
-                <input type="number" min="0" step="0.01" [(ngModel)]="grossIncome" name="grossIncome"
+                <input type="text" appCurrencyFormatter [(ngModel)]="grossIncome" name="grossIncome"
                   placeholder="0.00" class="w-full pl-7 pr-4 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
             </div>
@@ -466,7 +467,7 @@ function computeProgressiveTax(annualIncome: number, brackets: Bracket[]): numbe
                   <label class="block text-xs font-semibold text-slate-600 uppercase mb-2">Business Expenses</label>
                   <div class="relative">
                     <span class="absolute left-3.5 top-2.5 text-xs text-slate-400 font-bold">{{ currencySymbol() }}</span>
-                    <input type="number" min="0" step="0.01" [(ngModel)]="businessExpenses" name="businessExpenses"
+                    <input type="text" appCurrencyFormatter [(ngModel)]="businessExpenses" name="businessExpenses"
                       placeholder="0.00" class="w-full pl-7 pr-4 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </div>
                 </div>
@@ -474,7 +475,7 @@ function computeProgressiveTax(annualIncome: number, brackets: Bracket[]): numbe
                   <label class="block text-xs font-semibold text-slate-600 uppercase mb-2">Retirement Contributions</label>
                   <div class="relative">
                     <span class="absolute left-3.5 top-2.5 text-xs text-slate-400 font-bold">{{ currencySymbol() }}</span>
-                    <input type="number" min="0" step="0.01" [(ngModel)]="retirementContributions" name="retirementContributions"
+                    <input type="text" appCurrencyFormatter [(ngModel)]="retirementContributions" name="retirementContributions"
                       placeholder="0.00" class="w-full pl-7 pr-4 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </div>
                 </div>
@@ -482,7 +483,7 @@ function computeProgressiveTax(annualIncome: number, brackets: Bracket[]): numbe
                   <label class="block text-xs font-semibold text-slate-600 uppercase mb-2">Health Insurance Premiums</label>
                   <div class="relative">
                     <span class="absolute left-3.5 top-2.5 text-xs text-slate-400 font-bold">{{ currencySymbol() }}</span>
-                    <input type="number" min="0" step="0.01" [(ngModel)]="healthInsurancePremiums" name="healthInsurancePremiums"
+                    <input type="text" appCurrencyFormatter [(ngModel)]="healthInsurancePremiums" name="healthInsurancePremiums"
                       placeholder="0.00" class="w-full pl-7 pr-4 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </div>
                 </div>
@@ -490,7 +491,7 @@ function computeProgressiveTax(annualIncome: number, brackets: Bracket[]): numbe
                   <label class="block text-xs font-semibold text-slate-600 uppercase mb-2">Home Office Deduction</label>
                   <div class="relative">
                     <span class="absolute left-3.5 top-2.5 text-xs text-slate-400 font-bold">{{ currencySymbol() }}</span>
-                    <input type="number" min="0" step="0.01" [(ngModel)]="homeOfficeDeductions" name="homeOfficeDeductions"
+                    <input type="text" appCurrencyFormatter [(ngModel)]="homeOfficeDeductions" name="homeOfficeDeductions"
                       placeholder="0.00" class="w-full pl-7 pr-4 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </div>
                 </div>

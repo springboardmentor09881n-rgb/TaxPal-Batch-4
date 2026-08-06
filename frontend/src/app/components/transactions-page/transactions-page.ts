@@ -3,11 +3,12 @@ import { FormsModule } from '@angular/forms';
 import { DataService } from '../../services/data.service';
 import { CategoryService } from '../../services/category.service';
 import { Category } from '../../models';
+import { CurrencyFormatterDirective } from '../../directives/currency-formatter.directive';
 
 @Component({
   selector: 'app-transactions-list',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, CurrencyFormatterDirective],
   styles: [`
     @keyframes fadeInUp {
       from { opacity: 0; transform: translateY(12px); }
@@ -233,7 +234,7 @@ import { Category } from '../../models';
                 <div class="relative">
                   <span class="absolute left-3.5 top-2.5 text-xs text-slate-400 font-bold">₹</span>
                   <input
-                    id="tx-amount" name="tx-amount" type="number" step="0.01" required min="0.01"
+                    id="tx-amount" name="tx-amount" type="text" appCurrencyFormatter required
                     [(ngModel)]="txAmount"
                     placeholder="0.00"
                     class="w-full pl-7 pr-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
