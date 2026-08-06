@@ -229,27 +229,27 @@ exports.calculateTaxEstimate = async (req, res) => {
             healthInsurancePremiums,
             homeOfficeDeductions
         } = req.body;
-        
+
         const userId = req.user.id;
-        
+
         // Calculate taxable income
-        const totalDeductions = (Number(businessExpenses) || 0) + 
-                                (Number(retirementContributions) || 0) + 
-                                (Number(healthInsurancePremiums) || 0) + 
-                                (Number(homeOfficeDeductions) || 0);
-                                
+        const totalDeductions = (Number(businessExpenses) || 0) +
+            (Number(retirementContributions) || 0) +
+            (Number(healthInsurancePremiums) || 0) +
+            (Number(homeOfficeDeductions) || 0);
+
         const taxableIncome = Math.max(0, (Number(grossIncomeForQuarter) || 0) - totalDeductions);
-        
+
         // Calculate tax based on country, state, filing status, and slabs
         const estimatedTax = calculateTax(taxableIncome, filingStatus, country, state);
-        
+
         // Determine Due Date based on Quarter and Tax Year
         const taxYear = requestYear ? Number(requestYear) : new Date().getFullYear();
         let dueDate;
         let reminderDate;
-        
-        switch(quarter) {
-            case 'Q1': 
+
+        switch (quarter) {
+            case 'Q1':
                 dueDate = new Date(taxYear, 3, 15); // April 15 of taxYear
                 reminderDate = new Date(taxYear, 3, 1); // April 1
                 break;
@@ -278,7 +278,7 @@ exports.calculateTaxEstimate = async (req, res) => {
                 country,
                 state,
                 quarter,
-                filingStatus,
+                filingStatus: filingStatus || 'SINGLE',
                 grossIncomeForQuarter: Number(grossIncomeForQuarter) || 0,
                 businessExpenses: Number(businessExpenses) || 0,
                 retirementContributions: Number(retirementContributions) || 0,
@@ -289,7 +289,7 @@ exports.calculateTaxEstimate = async (req, res) => {
             },
             { new: true, upsert: true, runValidators: true }
         );
-        
+
         // Schedule Alert with specific tax year message to avoid multi-year collisions
         const alertMessage = `Reminder: ${quarter} ${taxYear} Estimated Tax Payment`;
         await Alert.findOneAndUpdate(
@@ -331,10 +331,10 @@ exports.getTaxCalendar = async (req, res) => {
         // Fetch both estimates and alerts for the calendar view
         const estimates = await TaxEstimate.find({ userId });
         const alerts = await Alert.find({ userId, type: "TAX_DUE" });
-        
+
         // Format for frontend consumption
         const calendarEvents = [];
-        
+
         estimates.forEach(est => {
             const symbol = est.country === 'India' ? '₹' : '$';
             calendarEvents.push({
@@ -345,7 +345,7 @@ exports.getTaxCalendar = async (req, res) => {
                 quarter: est.quarter
             });
         });
-        
+
         alerts.forEach(alert => {
             calendarEvents.push({
                 type: 'reminder',
@@ -354,13 +354,13 @@ exports.getTaxCalendar = async (req, res) => {
                 isRead: alert.isRead
             });
         });
-        
+
         // Sort by date ascending
         calendarEvents.sort((a, b) => new Date(a.date) - new Date(b.date));
-        
+
         res.status(200).json({ success: true, data: calendarEvents });
-        
-    } catch(error) {
+
+    } catch (error) {
         console.error("Error fetching tax calendar:", error);
         res.status(500).json({ success: false, message: "Server Error" });
     }
