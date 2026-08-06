@@ -5,11 +5,12 @@ import { BudgetService } from '../../services/budget.service';
 import { CategoryService } from '../../services/category.service';
 import { DataService } from '../../services/data.service';
 import { Budget } from '../../models';
+import { CurrencyFormatterDirective } from '../../directives/currency-formatter.directive';
 
 @Component({
   selector: 'app-budgets-list',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, CurrencyFormatterDirective],
   template: `
     <div class="space-y-6 max-w-6xl mx-auto">
       <!-- Top Section -->
@@ -69,7 +70,7 @@ import { Budget } from '../../models';
                 <label class="block text-sm font-bold text-slate-700 mb-2">Budget Amount</label>
                 <div class="relative">
                   <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm font-bold">{{ currencySymbol }}</span>
-                  <input type="number" [(ngModel)]="formData.budget_amount" name="amount" required min="0.01" step="0.01" placeholder="0.00" class="w-full bg-white border border-slate-200 rounded-lg pl-8 pr-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm text-slate-700 transition-all">
+                  <input type="text" appCurrencyFormatter [(ngModel)]="formData.budget_amount" name="amount" required placeholder="0.00" class="w-full bg-white border border-slate-200 rounded-lg pl-8 pr-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm text-slate-700 transition-all">
                 </div>
               </div>
             </div>

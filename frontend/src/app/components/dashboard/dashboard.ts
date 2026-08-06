@@ -4,6 +4,7 @@ import { Router } from '@angular/router';
 import { DataService } from '../../services/data.service';
 import { CategoryService } from '../../services/category.service';
 import { Category } from '../../models';
+import { CurrencyFormatterDirective } from '../../directives/currency-formatter.directive';
 
 interface MonthlyTotal {
   label: string;
@@ -329,10 +330,9 @@ interface CategoryTotal {
                     <input 
                       id="amount"
                       name="amount"
-                      type="number" 
-                      step="0.01"
+                      type="text" 
+                      appCurrencyFormatter
                       required
-                      min="0.01"
                       [(ngModel)]="txAmount"
                       placeholder="0.00"
                       class="w-full pl-7 pr-4 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
