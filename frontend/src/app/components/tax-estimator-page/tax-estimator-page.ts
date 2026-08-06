@@ -395,11 +395,18 @@ function computeProgressiveTax(annualIncome: number, brackets: Bracket[]): numbe
 
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label class="block text-xs font-semibold text-slate-600 uppercase mb-2">Filing Status</label>
-                <select [(ngModel)]="filingStatus" name="filingStatus"
-                  class="w-full px-4 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  [class.text-slate-400]="!filingStatus" [class.text-slate-900]="!!filingStatus">
-                  <option value="" disabled class="text-slate-400">What describes you</option>
+                <label class="block text-xs font-semibold text-slate-600 uppercase mb-2">
+                  Filing Status
+                  @if (!requiresFilingStatus() && country) {
+                    <span class="text-[10px] font-normal text-slate-400 normal-case ml-1">(Not required for {{ country }})</span>
+                  }
+                </label>
+                <select [(ngModel)]="filingStatus" name="filingStatus" [disabled]="!requiresFilingStatus()"
+                  class="w-full px-4 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed disabled:border-slate-200"
+                  [class.text-slate-400]="!filingStatus || !requiresFilingStatus()" [class.text-slate-900]="!!filingStatus && requiresFilingStatus()">
+                  <option value="" disabled class="text-slate-400">
+                    {{ !country ? 'Select country first' : (!requiresFilingStatus() ? 'N/A for selected country' : 'What describes you') }}
+                  </option>
                   <option value="Single" class="text-slate-900">Single</option>
                   <option value="Married Filing Jointly" class="text-slate-900">Married Filing Jointly</option>
                   <option value="Head of Household" class="text-slate-900">Head of Household</option>
@@ -469,7 +476,14 @@ function computeProgressiveTax(annualIncome: number, brackets: Bracket[]): numbe
               <p class="text-xs font-semibold text-red-500">{{ formError() }}</p>
             }
 
-            <div class="flex justify-end pt-2">
+            <div class="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                (click)="resetForm()"
+                class="px-4 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-200 cursor-pointer transition-colors"
+              >
+                Reset Form
+              </button>
               <button type="submit" class="px-5 py-2.5 rounded-xl text-sm font-bold text-white bg-blue-600 hover:bg-blue-500 shadow-md shadow-blue-500/10 cursor-pointer">
                 Calculate Estimated Tax
               </button>
@@ -778,8 +792,15 @@ export class TaxEstimatorPage {
     }
   }
 
+  protected requiresFilingStatus(): boolean {
+    return this.country === 'United States';
+  }
+
   protected onCountryChange(): void {
     this.stateName = '';
+    if (!this.requiresFilingStatus()) {
+      this.filingStatus = 'Single';
+    }
     this.checkAndAutoNotify();
   }
 
@@ -892,10 +913,29 @@ export class TaxEstimatorPage {
     ];
   }
 
+  protected resetForm(): void {
+    this.country = '';
+    this.stateName = '';
+    this.filingStatus = '';
+    this.quarter = this.quarterOptions()[Math.floor((new Date().getMonth()) / 3)];
+    this.grossIncome = null;
+    this.businessExpenses = null;
+    this.retirementContributions = null;
+    this.healthInsurancePremiums = null;
+    this.homeOfficeDeductions = null;
+    this.result.set(null);
+    this.formError.set(null);
+    this.saveStatus.set('idle');
+  }
+
   protected calculate(event: Event): void {
     event.preventDefault();
 
-    if (!this.country || !this.stateName || !this.filingStatus) {
+    if (!this.requiresFilingStatus()) {
+      this.filingStatus = 'Single';
+    }
+
+    if (!this.country || !this.stateName || (this.requiresFilingStatus() && !this.filingStatus)) {
       this.formError.set('Please select country/region, state/province, and filing status before calculating.');
       return;
     }
@@ -1120,6 +1160,9 @@ export class TaxEstimatorPage {
     this.country = (item.country as CountryId) || '';
     this.stateName = item.state || '';
     this.filingStatus = FILING_STATUS_FROM_ENUM[item.filingStatus] ?? '';
+    if (!this.requiresFilingStatus()) {
+      this.filingStatus = 'Single';
+    }
 
     const code = item.quarter;
     this.quarter = this.quarterOptions().find(q => q.startsWith(code)) ?? this.quarterOptions()[0];
