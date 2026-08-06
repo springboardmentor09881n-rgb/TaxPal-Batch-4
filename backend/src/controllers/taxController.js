@@ -270,25 +270,50 @@ exports.calculateTaxEstimate = async (req, res) => {
                 reminderDate = new Date();
         }
 
-        // Upsert Tax Estimate matching the compound unique index { userId, quarter, dueDate }
-        const taxEstimate = await TaxEstimate.findOneAndUpdate(
-            { userId, quarter, dueDate },
-            {
-                userId,
-                country,
-                state,
-                quarter,
-                filingStatus: filingStatus || 'SINGLE',
-                grossIncomeForQuarter: Number(grossIncomeForQuarter) || 0,
-                businessExpenses: Number(businessExpenses) || 0,
-                retirementContributions: Number(retirementContributions) || 0,
-                healthInsurancePremiums: Number(healthInsurancePremiums) || 0,
-                homeOfficeDeductions: Number(homeOfficeDeductions) || 0,
-                estimatedTax,
-                dueDate
-            },
-            { new: true, upsert: true, runValidators: true }
-        );
+        // Update existing estimate if explicit ID is provided, else upsert matching compound index { userId, quarter, dueDate }
+        let taxEstimate;
+        if (req.body.id || req.body._id) {
+            const targetId = req.body.id || req.body._id;
+            taxEstimate = await TaxEstimate.findOneAndUpdate(
+                { _id: targetId, userId },
+                {
+                    userId,
+                    country,
+                    state,
+                    quarter,
+                    filingStatus: filingStatus || 'SINGLE',
+                    grossIncomeForQuarter: Number(grossIncomeForQuarter) || 0,
+                    businessExpenses: Number(businessExpenses) || 0,
+                    retirementContributions: Number(retirementContributions) || 0,
+                    healthInsurancePremiums: Number(healthInsurancePremiums) || 0,
+                    homeOfficeDeductions: Number(homeOfficeDeductions) || 0,
+                    estimatedTax,
+                    dueDate
+                },
+                { new: true, runValidators: true }
+            );
+        }
+
+        if (!taxEstimate) {
+            taxEstimate = await TaxEstimate.findOneAndUpdate(
+                { userId, quarter, dueDate },
+                {
+                    userId,
+                    country,
+                    state,
+                    quarter,
+                    filingStatus: filingStatus || 'SINGLE',
+                    grossIncomeForQuarter: Number(grossIncomeForQuarter) || 0,
+                    businessExpenses: Number(businessExpenses) || 0,
+                    retirementContributions: Number(retirementContributions) || 0,
+                    healthInsurancePremiums: Number(healthInsurancePremiums) || 0,
+                    homeOfficeDeductions: Number(homeOfficeDeductions) || 0,
+                    estimatedTax,
+                    dueDate
+                },
+                { new: true, upsert: true, runValidators: true }
+            );
+        }
 
         // Schedule Alert with specific tax year message to avoid multi-year collisions
         const alertMessage = `Reminder: ${quarter} ${taxYear} Estimated Tax Payment`;

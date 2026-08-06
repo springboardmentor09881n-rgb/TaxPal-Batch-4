@@ -91,7 +91,7 @@ export class TaxNotificationPanel {
   @Input() title = 'Quarterly Tax Reminder';
   @Input() message = '';
   @Input() dueDate = '';
-  @Input() priority: NotificationPriority = 'High';
+  @Input() priority: NotificationPriority = 'Medium';
 
   @Output() viewCalendar = new EventEmitter<void>();
   @Output() markAsDone = new EventEmitter<void>();
