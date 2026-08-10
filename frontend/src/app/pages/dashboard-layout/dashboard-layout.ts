@@ -3,11 +3,13 @@ import { RouterOutlet } from '@angular/router';
 import { Sidebar, TabName } from '../../components/sidebar/sidebar';
 import { Router } from '@angular/router';
 import { ToastService } from '../../services/toast.service';
+import { TaxEstimateService } from '../../services/tax-estimate.service';
+import { TaxNotificationPanel } from '../../components/tax-notification-panel/tax-notification-panel';
 
 @Component({
   selector: 'app-dashboard-layout',
   standalone: true,
-  imports: [RouterOutlet, Sidebar],
+  imports: [RouterOutlet, Sidebar, TaxNotificationPanel],
   styles: [`
     @keyframes fadeInUp {
       from { opacity: 0; transform: translateY(16px); }
@@ -22,6 +24,23 @@ import { ToastService } from '../../services/toast.service';
           <router-outlet></router-outlet>
         </main>
       </div>
+
+      @if (taxEstimateService.notifications().length > 0) {
+        <div
+          class="fixed top-20 right-4 sm:right-6 flex flex-col gap-3 w-[calc(100%-2rem)] max-w-sm max-h-[75vh] overflow-y-auto pr-1 z-[999]"
+        >
+          @for (n of taxEstimateService.notifications(); track n.id) {
+            <app-tax-notification-panel
+              [message]="n.message"
+              [dueDate]="n.dueDate"
+              [priority]="n.priority || 'Medium'"
+              (viewCalendar)="navigateToTaxEstimatorCalendar()"
+              (markAsDone)="taxEstimateService.dismissNotification(n.id)"
+              (dismiss)="taxEstimateService.dismissNotification(n.id)"
+            ></app-tax-notification-panel>
+          }
+        </div>
+      }
 
       <!-- Floating Error Toast Alerts overlay -->
       <div class="fixed bottom-5 right-5 z-[9999] space-y-3 pointer-events-none max-w-sm w-full px-4">
@@ -54,6 +73,7 @@ import { ToastService } from '../../services/toast.service';
 })
 export class DashboardLayoutComponent implements OnInit {
   protected readonly toastService = inject(ToastService);
+  protected readonly taxEstimateService = inject(TaxEstimateService);
   activeTab: TabName = 'dashboard';
 
   constructor(private router: Router) {
@@ -80,10 +100,15 @@ export class DashboardLayoutComponent implements OnInit {
     if (['dashboard', 'transactions', 'budgets', 'tax-estimator', 'reports', 'settings'].includes(currentPath)) {
       this.activeTab = currentPath;
     }
+    this.taxEstimateService.checkAndAutoNotify();
   }
 
   onTabChange(tab: TabName): void {
     this.activeTab = tab;
     this.router.navigate([`/${tab}`]);
+  }
+
+  navigateToTaxEstimatorCalendar(): void {
+    this.router.navigate(['/tax-estimator'], { queryParams: { tab: 'calendar' } });
   }
 }

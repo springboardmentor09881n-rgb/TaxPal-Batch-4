@@ -1,7 +1,8 @@
 import { Component, signal, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { TaxNotificationPanel, NotificationPriority } from '../tax-notification-panel/tax-notification-panel';
+import { ActivatedRoute } from '@angular/router';
 import { TaxEstimateService } from '../../services/tax-estimate.service';
+import { DataService } from '../../services/data.service';
 import { TaxEstimate, TaxEstimateFilingStatus } from '../../models';
 import { CurrencyFormatterDirective } from '../../directives/currency-formatter.directive';
 
@@ -34,12 +35,7 @@ interface CalendarEntry {
   description: string;
 }
 
-interface TaxReminder {
-  id: string;
-  message: string;
-  dueDate: string;
-  priority?: NotificationPriority;
-}
+
 
 const US_STATES: StateOption[] = [
   { name: 'Alabama', rate: 0.05 }, { name: 'Alaska', rate: 0 }, { name: 'Arizona', rate: 0.025 },
@@ -288,7 +284,7 @@ function computeProgressiveTax(annualIncome: number, brackets: Bracket[]): numbe
 @Component({
   selector: 'app-tax-estimator',
   standalone: true,
-  imports: [FormsModule, TaxNotificationPanel, CurrencyFormatterDirective],
+  imports: [FormsModule, CurrencyFormatterDirective],
   template: `
     <div class="space-y-2">
       @if (showCalcToast()) {
@@ -312,26 +308,7 @@ function computeProgressiveTax(annualIncome: number, brackets: Bracket[]): numbe
         <p class="text-xs text-slate-500 mt-1">Calculate your estimated tax obligations</p>
       </div>
 
-      @if (notifications().length > 0) {
-        <!-- Floating overlay: sits above the form/page content instead of pushing layout down.
-             Adjust notificationZIndex (below in the component class) to raise or lower it
-             relative to other overlays such as the "calculated" toast. -->
-        <div
-          class="fixed top-20 right-4 sm:right-6 flex flex-col gap-3 w-[calc(100%-2rem)] max-w-sm max-h-[75vh] overflow-y-auto pr-1"
-          [style.z-index]="notificationZIndex"
-        >
-          @for (n of notifications(); track n.id) {
-            <app-tax-notification-panel
-              [message]="n.message"
-              [dueDate]="n.dueDate"
-              [priority]="n.priority || 'Medium'"
-              (viewCalendar)="view.set('calendar')"
-              (markAsDone)="dismissNotification(n.id)"
-              (dismiss)="dismissNotification(n.id)"
-            ></app-tax-notification-panel>
-          }
-        </div>
-      }
+      <!-- Notifications floating overlay removed (now handled globally in DashboardLayoutComponent) -->
 
       <!-- View toggle -->
       <div class="inline-flex items-center gap-1 bg-slate-100 rounded-xl p-1 mb-6">
@@ -605,27 +582,7 @@ function computeProgressiveTax(annualIncome: number, brackets: Bracket[]): numbe
             <h3 class="text-sm font-bold text-slate-900">Tax Calendar</h3>
             <p class="text-xs text-slate-500 mt-1">Quarterly filing deadlines for {{ country || 'your region' }}</p>
           </div>
-          <button
-            type="button"
-            (click)="toggleNotifications()"
-            class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 cursor-pointer hover:bg-slate-50"
-          >
-            Notifications
-            <span
-              class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors"
-              [class.bg-blue-600]="notificationsEnabled()"
-              [class.bg-slate-200]="!notificationsEnabled()"
-            >
-              <span
-                class="inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform"
-                [class.translate-x-4]="notificationsEnabled()"
-                [class.translate-x-1]="!notificationsEnabled()"
-              ></span>
-            </span>
-            <span [class.text-blue-600]="notificationsEnabled()" [class.text-slate-400]="!notificationsEnabled()">
-              {{ notificationsEnabled() ? 'On' : 'Off' }}
-            </span>
-          </button>
+          <!-- Manual notifications switch removed -->
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -656,32 +613,7 @@ function computeProgressiveTax(annualIncome: number, brackets: Bracket[]): numbe
                     <span class="text-blue-600">&middot; {{ daysUntil(entry.dueDate) }} days left</span>
                   }
                 </p>
-                <button
-                  type="button"
-                  (click)="toggleReminder(entry)"
-                  [disabled]="isPast(entry) || !notificationsEnabled()"
-                  class="mt-3 flex items-center gap-2 disabled:cursor-not-allowed"
-                  [class.cursor-pointer]="!isPast(entry) && notificationsEnabled()"
-                >
-                  <span
-                    class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors shrink-0"
-                    [class.bg-blue-600]="hasReminder(entry) && !isPast(entry) && notificationsEnabled()"
-                    [class.bg-slate-200]="!(hasReminder(entry) && !isPast(entry) && notificationsEnabled())"
-                  >
-                    <span
-                      class="inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform"
-                      [class.translate-x-4]="hasReminder(entry) && !isPast(entry) && notificationsEnabled()"
-                      [class.translate-x-1]="!(hasReminder(entry) && !isPast(entry) && notificationsEnabled())"
-                    ></span>
-                  </span>
-                  <span
-                    class="text-[11px] font-bold"
-                    [class.text-blue-600]="hasReminder(entry) && !isPast(entry) && notificationsEnabled()"
-                    [class.text-slate-400]="!(hasReminder(entry) && !isPast(entry) && notificationsEnabled())"
-                  >
-                    {{ !notificationsEnabled() ? 'Notifications off' : (isPast(entry) ? 'Deadline passed' : (hasReminder(entry) ? 'Notify: On' : 'Notify: Off')) }}
-                  </span>
-                </button>
+                <!-- Manual calendar entry reminder button removed -->
               </div>
             </div>
           }
@@ -753,16 +685,13 @@ function computeProgressiveTax(annualIncome: number, brackets: Bracket[]): numbe
 })
 export class TaxEstimatorPage {
   protected readonly taxEstimateService = inject(TaxEstimateService);
+  private readonly dataService = inject(DataService);
+  private readonly route = inject(ActivatedRoute);
 
   protected country: '' | CountryId = '';
   protected stateName = '';
   protected filingStatus: FilingStatus | '' = '';
   protected quarter = '';
-
-  // Controls how high the floating tax-reminder notifications stack above the page.
-  // Raise this if another overlay (e.g. a modal) needs to sit above the notifications;
-  // lower it if the notifications should sit behind something else.
-  protected readonly notificationZIndex = 70;
 
   protected editingEstimateId: string | null = null;
 
@@ -778,8 +707,6 @@ export class TaxEstimatorPage {
   protected readonly showCalcToast = signal(false);
 
   protected readonly view = signal<'calculator' | 'calendar'>('calculator');
-  protected readonly notifications = signal<TaxReminder[]>([]);
-  protected readonly notificationsEnabled = signal(true);
   protected readonly today = new Date();
 
   protected calendarEntries(): CalendarEntry[] {
@@ -800,48 +727,6 @@ export class TaxEstimatorPage {
     ];
   }
 
-  protected createReminder(entry: CalendarEntry): void {
-    if (!this.notificationsEnabled()) return;
-    const days = this.daysUntil(entry.dueDate);
-    const priority: NotificationPriority = (days > 0 && days <= 7) ? 'High' : (days > 7 && days <= 40 ? 'Medium' : 'Low');
-    const id = `${this.country}-${entry.quarter}-${entry.dueDate.getTime()}`;
-    const reminder: TaxReminder = {
-      id,
-      message: `Your ${entry.quarter} tax filing is due in ${days} day${days === 1 ? '' : 's'}.`,
-      dueDate: entry.dueDate.toLocaleDateString(this.locale(), { month: 'short', day: 'numeric', year: 'numeric' }),
-      priority
-    };
-    this.notifications.update((list: TaxReminder[]) => {
-      const idx = list.findIndex(n => n.id === id);
-      if (idx >= 0) {
-        const updated = [...list];
-        updated[idx] = reminder;
-        return updated;
-      }
-      return [...list, reminder];
-    });
-  }
-
-  protected toggleReminder(entry: CalendarEntry): void {
-    if (this.isPast(entry)) return;
-    if (this.hasReminder(entry)) {
-      const id = `${this.country}-${entry.quarter}-${entry.dueDate.getTime()}`;
-      this.dismissNotification(id);
-    } else {
-      this.createReminder(entry);
-    }
-  }
-
-  protected toggleNotifications(): void {
-    const next = !this.notificationsEnabled();
-    this.notificationsEnabled.set(next);
-    if (!next) {
-      this.notifications.set([]);
-    } else {
-      this.checkAndAutoNotify();
-    }
-  }
-
   protected requiresFilingStatus(): boolean {
     return this.country === 'United States';
   }
@@ -851,26 +736,6 @@ export class TaxEstimatorPage {
     if (!this.requiresFilingStatus()) {
       this.filingStatus = 'Single';
     }
-    this.checkAndAutoNotify();
-  }
-
-  private checkAndAutoNotify(): void {
-    if (!this.notificationsEnabled() || !this.country) return;
-    const entries = this.calendarEntries();
-    const next = entries.find(e => e.dueDate >= this.today) ?? entries[0];
-    if (!next || this.hasReminder(next)) return;
-    if (this.daysUntil(next.dueDate) <= 7) {
-      this.createReminder(next);
-    }
-  }
-
-  protected dismissNotification(id: string): void {
-    this.notifications.update((list: TaxReminder[]) => list.filter((n: TaxReminder) => n.id !== id));
-  }
-
-  protected hasReminder(entry: CalendarEntry): boolean {
-    const id = `${this.country}-${entry.quarter}-${entry.dueDate.getTime()}`;
-    return this.notifications().some((n: TaxReminder) => n.id === id);
   }
 
   protected isNextDue(entry: CalendarEntry): boolean {
@@ -899,10 +764,19 @@ export class TaxEstimatorPage {
   ];
 
   constructor() {
+    const user = this.dataService.currentUser();
+    if (user) {
+      this.country = (user.country || 'United States') as CountryId;
+      this.stateName = user.state || '';
+    }
     this.quarter = this.quarterOptions()[Math.floor((new Date().getMonth()) / 3)];
     this.taxEstimateService.loadEstimates();
     this.taxEstimateService.loadCalendar();
-    this.checkAndAutoNotify();
+
+    const tab = this.route.snapshot.queryParamMap.get('tab');
+    if (tab === 'calendar') {
+      this.view.set('calendar');
+    }
   }
 
 
@@ -1067,7 +941,6 @@ export class TaxEstimatorPage {
     });
 
     this.persistEstimate(totalTax);
-    this.autoCreateReminder();
 
     this.showCalcToast.set(true);
     setTimeout(() => this.showCalcToast.set(false), 3500);
@@ -1108,7 +981,6 @@ export class TaxEstimatorPage {
       next: () => {
         this.saveStatus.set('saved');
         this.taxEstimateService.loadEstimates();
-        this.checkAndAutoNotify();
       },
       error: (err: any) => {
         console.error('Failed to save tax estimate', err);
@@ -1127,20 +999,12 @@ export class TaxEstimatorPage {
           );
           if (justSaved) {
             this.saveStatus.set('saved');
-            this.checkAndAutoNotify();
           } else {
             this.saveStatus.set('error');
           }
         }, 800);
       }
     });
-  }
-
-  private autoCreateReminder(): void {
-    if (!this.notificationsEnabled()) return;
-    const entry = this.calendarEntries().find(e => e.quarter === this.quarterCode());
-    if (!entry || this.isPast(entry) || this.hasReminder(entry)) return;
-    this.createReminder(entry);
   }
 
   protected currencySymbolFor(country: string): string {
