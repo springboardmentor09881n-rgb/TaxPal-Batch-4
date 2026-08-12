@@ -5,11 +5,12 @@ import { Router } from '@angular/router';
 import { ToastService } from '../../services/toast.service';
 import { TaxEstimateService } from '../../services/tax-estimate.service';
 import { TaxNotificationPanel } from '../../components/tax-notification-panel/tax-notification-panel';
+import { ChatbotWidgetComponent } from '../../components/chatbot-widget/chatbot-widget';
 
 @Component({
   selector: 'app-dashboard-layout',
   standalone: true,
-  imports: [RouterOutlet, Sidebar, TaxNotificationPanel],
+  imports: [RouterOutlet, Sidebar, TaxNotificationPanel, ChatbotWidgetComponent],
   styles: [`
     @keyframes fadeInUp {
       from { opacity: 0; transform: translateY(16px); }
@@ -24,6 +25,9 @@ import { TaxNotificationPanel } from '../../components/tax-notification-panel/ta
           <router-outlet></router-outlet>
         </main>
       </div>
+
+      <!-- Floating Chatbot Widget -->
+      <app-chatbot-widget></app-chatbot-widget>
 
       @if (taxEstimateService.notifications().length > 0) {
         <div

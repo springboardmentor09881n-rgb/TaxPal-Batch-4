@@ -74,3 +74,29 @@ export interface TaxEstimate {
   createdAt?: string;
   updatedAt?: string;
 }
+
+export interface ChatMessage {
+  id: string;
+  sender: 'user' | 'bot';
+  text: string;
+  timestamp: Date;
+  category?: string;
+  actionRoute?: string;
+  actionLabel?: string;
+  quickPrompts?: string[];
+}
+
+export interface QuickPrompt {
+  label: string;
+  query: string;
+}
+
+export interface ChatbotResponse {
+  success: boolean;
+  answer: string;
+  category?: string;
+  actionRoute?: string;
+  actionLabel?: string;
+  quickPrompts?: string[];
+}
+
