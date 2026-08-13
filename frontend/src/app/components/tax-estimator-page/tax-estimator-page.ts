@@ -1,8 +1,9 @@
 import { Component, signal, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { TaxNotificationPanel } from '../tax-notification-panel/tax-notification-panel';
+import { TaxNotificationPanel, NotificationPriority } from '../tax-notification-panel/tax-notification-panel';
 import { TaxEstimateService } from '../../services/tax-estimate.service';
 import { TaxEstimate, TaxEstimateFilingStatus } from '../../models';
+import { CurrencyFormatterDirective } from '../../directives/currency-formatter.directive';
 
 interface Bracket {
   upTo: number;
@@ -37,6 +38,7 @@ interface TaxReminder {
   id: string;
   message: string;
   dueDate: string;
+  priority?: NotificationPriority;
 }
 
 const US_STATES: StateOption[] = [
@@ -59,7 +61,7 @@ const US_STATES: StateOption[] = [
   { name: 'Wisconsin', rate: 0.053 }, { name: 'Wyoming', rate: 0 }, { name: 'District of Columbia', rate: 0.0895 }
 ];
 
-type CountryId = 'United States' | 'India' | 'Canada' | 'United Kingdom' | 'Australia' | 'Germany';
+type CountryId = 'United States' | 'India' | 'Canada' | 'United Kingdom' | 'Australia' | 'Germany' | 'European Union' | 'Japan' | 'Singapore' | 'United Arab Emirates';
 
 const CANADA_PROVINCES: StateOption[] = [
   { name: 'Alberta', rate: 0.10 }, { name: 'British Columbia', rate: 0.128 }, { name: 'Manitoba', rate: 0.174 },
@@ -89,6 +91,26 @@ const GERMANY_STATES: StateOption[] = [
   { name: 'Thuringia', rate: 0 }
 ];
 
+const JAPAN_PREFECTURES: StateOption[] = [
+  { name: 'Tokyo', rate: 0.10 }, { name: 'Osaka', rate: 0.10 }, { name: 'Kyoto', rate: 0.10 },
+  { name: 'Kanagawa', rate: 0.10 }, { name: 'Aichi', rate: 0.10 }, { name: 'Hokkaido', rate: 0.10 },
+  { name: 'Fukuoka', rate: 0.10 }, { name: 'Hyogo', rate: 0.10 }, { name: 'Chiba', rate: 0.10 },
+  { name: 'Saitama', rate: 0.10 }, { name: 'Shizuoka', rate: 0.10 }, { name: 'Miyagi', rate: 0.10 },
+  { name: 'Hiroshima', rate: 0.10 }
+];
+
+const SINGAPORE_REGIONS: StateOption[] = [
+  { name: 'Central Region', rate: 0 }, { name: 'East Region', rate: 0 },
+  { name: 'North Region', rate: 0 }, { name: 'North-East Region', rate: 0 },
+  { name: 'West Region', rate: 0 }
+];
+
+const UAE_EMIRATES: StateOption[] = [
+  { name: 'Abu Dhabi', rate: 0 }, { name: 'Dubai', rate: 0 }, { name: 'Sharjah', rate: 0 },
+  { name: 'Ajman', rate: 0 }, { name: 'Umm Al Quwain', rate: 0 }, { name: 'Ras Al Khaimah', rate: 0 },
+  { name: 'Fujairah', rate: 0 }
+];
+
 const CANADA_FEDERAL_BRACKETS: Bracket[] = [
   { upTo: 55867, rate: 0.15 }, { upTo: 111733, rate: 0.205 }, { upTo: 173205, rate: 0.26 },
   { upTo: 246752, rate: 0.29 }, { upTo: Infinity, rate: 0.33 }
@@ -113,6 +135,19 @@ const GERMANY_BRACKETS: Bracket[] = [
   { upTo: 277825, rate: 0.42 }, { upTo: Infinity, rate: 0.45 }
 ];
 
+const JAPAN_BRACKETS: Bracket[] = [
+  { upTo: 1950000, rate: 0.05 }, { upTo: 3300000, rate: 0.10 }, { upTo: 6950000, rate: 0.20 },
+  { upTo: 9000000, rate: 0.23 }, { upTo: 18000000, rate: 0.33 }, { upTo: 40000000, rate: 0.40 },
+  { upTo: Infinity, rate: 0.45 }
+];
+
+const SINGAPORE_BRACKETS: Bracket[] = [
+  { upTo: 20000, rate: 0 }, { upTo: 30000, rate: 0.02 }, { upTo: 40000, rate: 0.035 },
+  { upTo: 80000, rate: 0.07 }, { upTo: 120000, rate: 0.115 }, { upTo: 160000, rate: 0.15 },
+  { upTo: 200000, rate: 0.18 }, { upTo: 240000, rate: 0.19 }, { upTo: 280000, rate: 0.20 },
+  { upTo: 320000, rate: 0.22 }, { upTo: Infinity, rate: 0.24 }
+];
+
 interface CountryTaxConfig {
   states: StateOption[];
   stateLabel: string;
@@ -127,10 +162,19 @@ interface CountryTaxConfig {
   locale: string;
 }
 
-// Countries beyond the original United States / India support. Each entry captures the
-// bracket table, provincial/regional tax treatment, and a secondary levy (self-employment
-// equivalent) used to build the tax summary for that country.
-const COUNTRY_CONFIG: Partial<Record<CountryId, CountryTaxConfig>> = {
+const COUNTRY_CONFIG: Record<CountryId, CountryTaxConfig> = {
+  'United States': {
+    states: US_STATES, stateLabel: 'State', hasStateTax: true,
+    stateTaxLabel: 'State Income Tax (est.)', brackets: [], firmRate: 0.21,
+    extraTaxLabel: 'Self-Employment Tax (est.)', extraTaxBase: 'income', extraTaxRate: 0.153,
+    currency: '$', locale: 'en-US'
+  },
+  'India': {
+    states: [], stateLabel: 'State', hasStateTax: false,
+    stateTaxLabel: 'State Income Tax (est.)', brackets: [], firmRate: 0.25,
+    extraTaxLabel: 'Health & Education Cess (est.)', extraTaxBase: 'tax', extraTaxRate: 0.04,
+    currency: '₹', locale: 'en-IN'
+  },
   'Canada': {
     states: CANADA_PROVINCES, stateLabel: 'Province', hasStateTax: true,
     stateTaxLabel: 'Provincial Income Tax (est.)', brackets: CANADA_FEDERAL_BRACKETS, firmRate: 0.15,
@@ -154,6 +198,30 @@ const COUNTRY_CONFIG: Partial<Record<CountryId, CountryTaxConfig>> = {
     stateTaxLabel: 'State Income Tax (est.)', brackets: GERMANY_BRACKETS, firmRate: 0.15,
     extraTaxLabel: 'Solidarity Surcharge (est.)', extraTaxBase: 'tax', extraTaxRate: 0.055,
     currency: '€', locale: 'de-DE'
+  },
+  'European Union': {
+    states: GERMANY_STATES, stateLabel: 'Member State Region', hasStateTax: false,
+    stateTaxLabel: 'State Income Tax (est.)', brackets: GERMANY_BRACKETS, firmRate: 0.15,
+    extraTaxLabel: 'Solidarity Surcharge (est.)', extraTaxBase: 'tax', extraTaxRate: 0.055,
+    currency: '€', locale: 'de-DE'
+  },
+  'Japan': {
+    states: JAPAN_PREFECTURES, stateLabel: 'Prefecture', hasStateTax: true,
+    stateTaxLabel: 'Inhabitant Tax (est.)', brackets: JAPAN_BRACKETS, firmRate: 0.232,
+    extraTaxLabel: 'Enterprise Tax (est.)', extraTaxBase: 'income', extraTaxRate: 0.05,
+    currency: '¥', locale: 'ja-JP'
+  },
+  'Singapore': {
+    states: SINGAPORE_REGIONS, stateLabel: 'Region', hasStateTax: false,
+    stateTaxLabel: 'Regional Tax (est.)', brackets: SINGAPORE_BRACKETS, firmRate: 0.17,
+    extraTaxLabel: 'Medisave Levy (est.)', extraTaxBase: 'income', extraTaxRate: 0.06,
+    currency: 'S$', locale: 'en-SG'
+  },
+  'United Arab Emirates': {
+    states: UAE_EMIRATES, stateLabel: 'Emirate', hasStateTax: false,
+    stateTaxLabel: 'Emirate Tax (est.)', brackets: [{ upTo: Infinity, rate: 0 }], firmRate: 0.09,
+    extraTaxLabel: 'Corporate Tax (est.)', extraTaxBase: 'income', extraTaxRate: 0,
+    currency: 'AED', locale: 'ar-AE'
   }
 };
 
@@ -220,7 +288,7 @@ function computeProgressiveTax(annualIncome: number, brackets: Bracket[]): numbe
 @Component({
   selector: 'app-tax-estimator',
   standalone: true,
-  imports: [FormsModule, TaxNotificationPanel],
+  imports: [FormsModule, TaxNotificationPanel, CurrencyFormatterDirective],
   template: `
     <div class="space-y-2">
       @if (showCalcToast()) {
@@ -256,6 +324,7 @@ function computeProgressiveTax(annualIncome: number, brackets: Bracket[]): numbe
             <app-tax-notification-panel
               [message]="n.message"
               [dueDate]="n.dueDate"
+              [priority]="n.priority || 'Medium'"
               (viewCalendar)="view.set('calendar')"
               (markAsDone)="dismissNotification(n.id)"
               (dismiss)="dismissNotification(n.id)"
@@ -295,6 +364,29 @@ function computeProgressiveTax(annualIncome: number, brackets: Bracket[]): numbe
         <div class="lg:col-span-8 bg-white rounded-2xl border border-slate-200/60 shadow-sm p-6">
           <h3 class="text-sm font-bold text-slate-900 mb-6">Quarterly Tax Calculator</h3>
 
+          @if (editingEstimateId) {
+            <div class="mb-5 flex items-center justify-between gap-3 rounded-xl bg-blue-50 border border-blue-200 p-3.5 text-xs text-blue-900 shadow-sm">
+              <div class="flex items-center gap-2.5">
+                <div class="shrink-0 h-7 w-7 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600">
+                  <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+                  </svg>
+                </div>
+                <div>
+                  <span class="font-bold block">Editing Saved Tax Estimate</span>
+                  <span class="text-blue-700 text-[11px]">Submitting will update this estimate record in your database.</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                (click)="cancelEdit()"
+                class="px-3 py-1.5 rounded-lg text-xs font-bold text-blue-700 bg-white hover:bg-blue-100 border border-blue-200 cursor-pointer transition-colors shrink-0"
+              >
+                Cancel Edit
+              </button>
+            </div>
+          }
+
           <form (submit)="calculate($event)" class="space-y-5">
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
@@ -303,12 +395,15 @@ function computeProgressiveTax(annualIncome: number, brackets: Bracket[]): numbe
                   class="w-full px-4 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                   [class.text-slate-400]="!country" [class.text-slate-900]="!!country">
                   <option value="" disabled class="text-slate-400">Select country</option>
-                  <option value="United States" class="text-slate-900">United States</option>
                   <option value="India" class="text-slate-900">India</option>
-                  <option value="Canada" class="text-slate-900">Canada</option>
+                  <option value="United States" class="text-slate-900">United States</option>
                   <option value="United Kingdom" class="text-slate-900">United Kingdom</option>
+                  <option value="European Union" class="text-slate-900">European Union</option>
+                  <option value="Japan" class="text-slate-900">Japan</option>
+                  <option value="Canada" class="text-slate-900">Canada</option>
                   <option value="Australia" class="text-slate-900">Australia</option>
-                  <option value="Germany" class="text-slate-900">Germany</option>
+                  <option value="Singapore" class="text-slate-900">Singapore</option>
+                  <option value="United Arab Emirates" class="text-slate-900">United Arab Emirates</option>
                 </select>
               </div>
               <div>
@@ -326,11 +421,18 @@ function computeProgressiveTax(annualIncome: number, brackets: Bracket[]): numbe
 
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label class="block text-xs font-semibold text-slate-600 uppercase mb-2">Filing Status</label>
-                <select [(ngModel)]="filingStatus" name="filingStatus"
-                  class="w-full px-4 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  [class.text-slate-400]="!filingStatus" [class.text-slate-900]="!!filingStatus">
-                  <option value="" disabled class="text-slate-400">What describes you</option>
+                <label class="block text-xs font-semibold text-slate-600 uppercase mb-2">
+                  Filing Status
+                  @if (!requiresFilingStatus() && country) {
+                    <span class="text-[10px] font-normal text-slate-400 normal-case ml-1">(Not required for {{ country }})</span>
+                  }
+                </label>
+                <select [(ngModel)]="filingStatus" name="filingStatus" [disabled]="!requiresFilingStatus()"
+                  class="w-full px-4 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed disabled:border-slate-200"
+                  [class.text-slate-400]="!filingStatus || !requiresFilingStatus()" [class.text-slate-900]="!!filingStatus && requiresFilingStatus()">
+                  <option value="" disabled class="text-slate-400">
+                    {{ !country ? 'Select country first' : (!requiresFilingStatus() ? 'N/A for selected country' : 'What describes you') }}
+                  </option>
                   <option value="Single" class="text-slate-900">Single</option>
                   <option value="Married Filing Jointly" class="text-slate-900">Married Filing Jointly</option>
                   <option value="Head of Household" class="text-slate-900">Head of Household</option>
@@ -353,7 +455,7 @@ function computeProgressiveTax(annualIncome: number, brackets: Bracket[]): numbe
               <label class="block text-xs font-semibold text-slate-600 uppercase mb-2">Gross Income for Quarter</label>
               <div class="relative">
                 <span class="absolute left-3.5 top-2.5 text-xs text-slate-400 font-bold">{{ currencySymbol() }}</span>
-                <input type="number" min="0" step="0.01" [(ngModel)]="grossIncome" name="grossIncome"
+                <input type="text" appCurrencyFormatter [(ngModel)]="grossIncome" name="grossIncome"
                   placeholder="0.00" class="w-full pl-7 pr-4 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
             </div>
@@ -365,7 +467,7 @@ function computeProgressiveTax(annualIncome: number, brackets: Bracket[]): numbe
                   <label class="block text-xs font-semibold text-slate-600 uppercase mb-2">Business Expenses</label>
                   <div class="relative">
                     <span class="absolute left-3.5 top-2.5 text-xs text-slate-400 font-bold">{{ currencySymbol() }}</span>
-                    <input type="number" min="0" step="0.01" [(ngModel)]="businessExpenses" name="businessExpenses"
+                    <input type="text" appCurrencyFormatter [(ngModel)]="businessExpenses" name="businessExpenses"
                       placeholder="0.00" class="w-full pl-7 pr-4 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </div>
                 </div>
@@ -373,7 +475,7 @@ function computeProgressiveTax(annualIncome: number, brackets: Bracket[]): numbe
                   <label class="block text-xs font-semibold text-slate-600 uppercase mb-2">Retirement Contributions</label>
                   <div class="relative">
                     <span class="absolute left-3.5 top-2.5 text-xs text-slate-400 font-bold">{{ currencySymbol() }}</span>
-                    <input type="number" min="0" step="0.01" [(ngModel)]="retirementContributions" name="retirementContributions"
+                    <input type="text" appCurrencyFormatter [(ngModel)]="retirementContributions" name="retirementContributions"
                       placeholder="0.00" class="w-full pl-7 pr-4 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </div>
                 </div>
@@ -381,7 +483,7 @@ function computeProgressiveTax(annualIncome: number, brackets: Bracket[]): numbe
                   <label class="block text-xs font-semibold text-slate-600 uppercase mb-2">Health Insurance Premiums</label>
                   <div class="relative">
                     <span class="absolute left-3.5 top-2.5 text-xs text-slate-400 font-bold">{{ currencySymbol() }}</span>
-                    <input type="number" min="0" step="0.01" [(ngModel)]="healthInsurancePremiums" name="healthInsurancePremiums"
+                    <input type="text" appCurrencyFormatter [(ngModel)]="healthInsurancePremiums" name="healthInsurancePremiums"
                       placeholder="0.00" class="w-full pl-7 pr-4 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </div>
                 </div>
@@ -389,7 +491,7 @@ function computeProgressiveTax(annualIncome: number, brackets: Bracket[]): numbe
                   <label class="block text-xs font-semibold text-slate-600 uppercase mb-2">Home Office Deduction</label>
                   <div class="relative">
                     <span class="absolute left-3.5 top-2.5 text-xs text-slate-400 font-bold">{{ currencySymbol() }}</span>
-                    <input type="number" min="0" step="0.01" [(ngModel)]="homeOfficeDeductions" name="homeOfficeDeductions"
+                    <input type="text" appCurrencyFormatter [(ngModel)]="homeOfficeDeductions" name="homeOfficeDeductions"
                       placeholder="0.00" class="w-full pl-7 pr-4 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   </div>
                 </div>
@@ -400,9 +502,16 @@ function computeProgressiveTax(annualIncome: number, brackets: Bracket[]): numbe
               <p class="text-xs font-semibold text-red-500">{{ formError() }}</p>
             }
 
-            <div class="flex justify-end pt-2">
+            <div class="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                (click)="resetForm()"
+                class="px-4 py-2.5 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-200 cursor-pointer transition-colors"
+              >
+                Reset Form
+              </button>
               <button type="submit" class="px-5 py-2.5 rounded-xl text-sm font-bold text-white bg-blue-600 hover:bg-blue-500 shadow-md shadow-blue-500/10 cursor-pointer">
-                Calculate Estimated Tax
+                {{ editingEstimateId ? 'Update Saved Estimate' : 'Calculate Estimated Tax' }}
               </button>
             </div>
           </form>
@@ -486,54 +595,6 @@ function computeProgressiveTax(annualIncome: number, brackets: Bracket[]): numbe
             </div>
           }
         </div>
-      </div>
-
-      <div class="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-6 mt-6">
-        <div class="flex items-center justify-between mb-4">
-          <div>
-            <h3 class="text-sm font-bold text-slate-900">Saved Tax Estimates</h3>
-            <p class="text-xs text-slate-500 mt-1">Review your previously saved tax calculations.</p>
-          </div>
-          <button
-            type="button"
-            (click)="taxEstimateService.loadEstimates()"
-            class="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 cursor-pointer"
-          >
-            Refresh
-          </button>
-        </div>
-
-        @if (taxEstimateService.estimates().length === 0) {
-          <p class="text-xs text-slate-400 py-6 text-center">No saved estimates yet. Calculate a tax estimate above to save one.</p>
-        } @else {
-          <div class="space-y-3 max-h-[300px] overflow-y-auto pr-1">
-            @for (est of taxEstimateService.estimates(); track est._id ?? (est.quarter + est.dueDate + est.estimatedTax)) {
-              <div class="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50/60 p-3 hover:border-blue-300 hover:bg-blue-50/40 transition-colors">
-                <div class="cursor-pointer flex-1 min-w-0" (click)="loadHistoryItem(est)" title="Load this estimate back into the calculator">
-                  <div class="text-sm font-semibold text-slate-900 truncate">
-                    {{ est.quarter }} {{ historyYear(est) }} &ndash; {{ getCountryName(est.country) }}
-                    @if (est.state) { <span class="text-slate-500 font-medium">({{ est.state }})</span> }
-                  </div>
-                  <div class="text-xs text-slate-500 mt-0.5">
-                    Tax Due:
-                    <strong class="text-slate-700">{{ getItemCurrencySymbol(est.country) }}{{ est.estimatedTax.toLocaleString(locale(), {minimumFractionDigits: 2, maximumFractionDigits: 2}) }}</strong>
-                    (Gross: {{ getItemCurrencySymbol(est.country) }}{{ est.grossIncomeForQuarter.toLocaleString(locale(), {maximumFractionDigits: 0}) }})
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  (click)="deleteHistoryItem(est._id, $event)"
-                  class="shrink-0 flex items-center justify-center h-8 w-8 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 cursor-pointer transition-colors"
-                  title="Delete Estimate"
-                >
-                  <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
-                  </svg>
-                </button>
-              </div>
-            }
-          </div>
-        }
       </div>
       }
 
@@ -626,6 +687,66 @@ function computeProgressiveTax(annualIncome: number, brackets: Bracket[]): numbe
           }
         </div>
       </div>
+
+      <div class="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-6 mt-6">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h3 class="text-sm font-bold text-slate-900">Saved Tax Estimates</h3>
+            <p class="text-xs text-slate-500 mt-1">Review your previously saved tax calculations.</p>
+          </div>
+          <button
+            type="button"
+            (click)="taxEstimateService.loadEstimates()"
+            class="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 cursor-pointer"
+          >
+            Refresh
+          </button>
+        </div>
+
+        @if (taxEstimateService.estimates().length === 0) {
+          <p class="text-xs text-slate-400 py-6 text-center">No saved estimates yet. Calculate a tax estimate in the calculator tab to save one.</p>
+        } @else {
+          <div class="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+            @for (est of taxEstimateService.estimates(); track est._id ?? (est.quarter + est.dueDate + est.estimatedTax)) {
+              <div class="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50/60 p-3 hover:border-slate-300 transition-colors">
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm font-semibold text-slate-900 truncate">
+                    {{ est.quarter }} {{ historyYear(est) }} &ndash; {{ getCountryName(est.country) }}
+                    @if (est.state) { <span class="text-slate-500 font-medium">({{ est.state }})</span> }
+                  </div>
+                  <div class="text-xs text-slate-500 mt-0.5">
+                    Tax Due:
+                    <strong class="text-slate-700">{{ getItemCurrencySymbol(est.country) }}{{ est.estimatedTax.toLocaleString(locale(), {minimumFractionDigits: 2, maximumFractionDigits: 2}) }}</strong>
+                    (Gross: {{ getItemCurrencySymbol(est.country) }}{{ est.grossIncomeForQuarter.toLocaleString(locale(), {maximumFractionDigits: 0}) }})
+                  </div>
+                </div>
+                <div class="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    (click)="startEditHistoryItem(est, $event)"
+                    class="flex items-center justify-center h-8 w-8 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50 cursor-pointer transition-colors"
+                    title="Edit Saved Estimate"
+                  >
+                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    (click)="deleteHistoryItem(est._id, $event)"
+                    class="flex items-center justify-center h-8 w-8 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 cursor-pointer transition-colors"
+                    title="Delete Estimate"
+                  >
+                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            }
+          </div>
+        }
+      </div>
       }
     </div>
   `
@@ -642,6 +763,8 @@ export class TaxEstimatorPage {
   // Raise this if another overlay (e.g. a modal) needs to sit above the notifications;
   // lower it if the notifications should sit behind something else.
   protected readonly notificationZIndex = 70;
+
+  protected editingEstimateId: string | null = null;
 
   protected grossIncome: number | null = null;
   protected businessExpenses: number | null = null;
@@ -679,14 +802,24 @@ export class TaxEstimatorPage {
 
   protected createReminder(entry: CalendarEntry): void {
     if (!this.notificationsEnabled()) return;
-    if (this.hasReminder(entry)) return;
     const days = this.daysUntil(entry.dueDate);
+    const priority: NotificationPriority = (days > 0 && days <= 7) ? 'High' : (days > 7 && days <= 40 ? 'Medium' : 'Low');
+    const id = `${this.country}-${entry.quarter}-${entry.dueDate.getTime()}`;
     const reminder: TaxReminder = {
-      id: `${this.country}-${entry.quarter}-${entry.dueDate.getTime()}`,
+      id,
       message: `Your ${entry.quarter} tax filing is due in ${days} day${days === 1 ? '' : 's'}.`,
-      dueDate: entry.dueDate.toLocaleDateString(this.locale(), { month: 'short', day: 'numeric', year: 'numeric' })
+      dueDate: entry.dueDate.toLocaleDateString(this.locale(), { month: 'short', day: 'numeric', year: 'numeric' }),
+      priority
     };
-    this.notifications.update((list: TaxReminder[]) => [...list, reminder]);
+    this.notifications.update((list: TaxReminder[]) => {
+      const idx = list.findIndex(n => n.id === id);
+      if (idx >= 0) {
+        const updated = [...list];
+        updated[idx] = reminder;
+        return updated;
+      }
+      return [...list, reminder];
+    });
   }
 
   protected toggleReminder(entry: CalendarEntry): void {
@@ -709,8 +842,15 @@ export class TaxEstimatorPage {
     }
   }
 
+  protected requiresFilingStatus(): boolean {
+    return this.country === 'United States';
+  }
+
   protected onCountryChange(): void {
     this.stateName = '';
+    if (!this.requiresFilingStatus()) {
+      this.filingStatus = 'Single';
+    }
     this.checkAndAutoNotify();
   }
 
@@ -761,8 +901,10 @@ export class TaxEstimatorPage {
   constructor() {
     this.quarter = this.quarterOptions()[Math.floor((new Date().getMonth()) / 3)];
     this.taxEstimateService.loadEstimates();
+    this.taxEstimateService.loadCalendar();
     this.checkAndAutoNotify();
   }
+
 
   protected stateOptions(): StateOption[] {
     if (this.country === 'India') return this.indiaStates;
@@ -821,10 +963,27 @@ export class TaxEstimatorPage {
     ];
   }
 
+  protected resetForm(): void {
+    this.country = '';
+    this.stateName = '';
+    this.filingStatus = '';
+    this.quarter = this.quarterOptions()[Math.floor((new Date().getMonth()) / 3)];
+    this.grossIncome = null;
+    this.businessExpenses = null;
+    this.retirementContributions = null;
+    this.healthInsurancePremiums = null;
+    this.homeOfficeDeductions = null;
+    this.formError.set(null);
+  }
+
   protected calculate(event: Event): void {
     event.preventDefault();
 
-    if (!this.country || !this.stateName || !this.filingStatus) {
+    if (!this.requiresFilingStatus()) {
+      this.filingStatus = 'Single';
+    }
+
+    if (!this.country || !this.stateName || (this.requiresFilingStatus() && !this.filingStatus)) {
       this.formError.set('Please select country/region, state/province, and filing status before calculating.');
       return;
     }
@@ -926,13 +1085,17 @@ export class TaxEstimatorPage {
   }
 
   private persistEstimate(totalTax: number): void {
+    const currentEditingId = this.editingEstimateId;
+    this.editingEstimateId = null;
+
     const payload: TaxEstimate = {
+      _id: currentEditingId ?? undefined,
       country: this.country,
       quarter: this.quarterCode(),
       estimatedTax: Math.round(totalTax * 100) / 100,
       dueDate: this.dueDateForSelectedQuarter().toISOString(),
       state: this.stateName,
-      filingStatus: FILING_STATUS_TO_ENUM[this.filingStatus as FilingStatus],
+      filingStatus: FILING_STATUS_TO_ENUM[this.filingStatus as FilingStatus] || 'SINGLE',
       grossIncomeForQuarter: Number(this.grossIncome) || 0,
       businessExpenses: Number(this.businessExpenses) || 0,
       retirementContributions: Number(this.retirementContributions) || 0,
@@ -984,9 +1147,14 @@ export class TaxEstimatorPage {
     switch (country) {
       case 'India': return '₹';
       case 'United Kingdom': return '£';
+      case 'European Union':
+      case 'Germany': return '€';
+      case 'Japan': return '¥';
       case 'Canada': return 'CA$';
       case 'Australia': return 'A$';
-      case 'Germany': return '€';
+      case 'Singapore': return 'S$';
+      case 'United Arab Emirates':
+      case 'UAE': return 'AED';
       default: return '$';
     }
   }
@@ -1038,12 +1206,16 @@ export class TaxEstimatorPage {
     return new Date().getFullYear();
   }
 
-  /** Reloads a saved estimate's inputs back into the calculator form so the
-   *  user can review or re-run it, then switches to the Calculator view. */
-  protected loadHistoryItem(item: TaxEstimate): void {
+  /** Loads a saved estimate into the form in Edit Mode. */
+  protected startEditHistoryItem(item: TaxEstimate, event: Event): void {
+    event.stopPropagation();
+    this.editingEstimateId = item._id ?? null;
     this.country = (item.country as CountryId) || '';
     this.stateName = item.state || '';
     this.filingStatus = FILING_STATUS_FROM_ENUM[item.filingStatus] ?? '';
+    if (!this.requiresFilingStatus()) {
+      this.filingStatus = 'Single';
+    }
 
     const code = item.quarter;
     this.quarter = this.quarterOptions().find(q => q.startsWith(code)) ?? this.quarterOptions()[0];
@@ -1057,6 +1229,12 @@ export class TaxEstimatorPage {
     this.result.set(null);
     this.formError.set(null);
     this.view.set('calculator');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  protected cancelEdit(): void {
+    this.editingEstimateId = null;
+    this.resetForm();
   }
 
   /** Deletes a saved estimate without triggering the row's load-into-form click handler. */

@@ -4,6 +4,7 @@ import { Router } from '@angular/router';
 import { DataService } from '../../services/data.service';
 import { CategoryService } from '../../services/category.service';
 import { Category } from '../../models';
+import { CurrencyFormatterDirective } from '../../directives/currency-formatter.directive';
 
 interface MonthlyTotal {
   label: string;
@@ -260,7 +261,7 @@ interface CategoryTotal {
             <tbody class="divide-y divide-slate-100">
               @for (tx of recentTransactions(); track $index) {
                 <tr class="hover:bg-slate-50/50">
-                  <td class="py-3.5 text-slate-500 font-medium">{{ tx.date }}</td>
+                  <td class="py-3.5 text-slate-500 font-medium">{{ formatDate(tx.date) }}</td>
                   <td class="py-3.5 font-semibold text-slate-800">{{ tx.description }}</td>
                   <td class="py-3.5 text-slate-500">
                     <span class="inline-flex items-center gap-1.5">
@@ -329,10 +330,9 @@ interface CategoryTotal {
                     <input 
                       id="amount"
                       name="amount"
-                      type="number" 
-                      step="0.01"
+                      type="text" 
+                      appCurrencyFormatter
                       required
-                      min="0.01"
                       [(ngModel)]="txAmount"
                       placeholder="0.00"
                       class="w-full pl-7 pr-4 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -605,6 +605,11 @@ export class Dashboard implements OnInit {
     const cats = this.dataService.categories();
     const match = cats.find(c => c.name === catName && c.type === type);
     return match ? match.color : '#64748b';
+  }
+
+  protected formatDate(dateStr: string): string {
+    if (!dateStr) return '';
+    return new Date(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
   }
 
   protected categoriesForType = computed(() => {

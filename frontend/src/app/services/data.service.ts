@@ -1,7 +1,8 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, signal, inject } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { catchError, firstValueFrom, of } from 'rxjs';
-import { User, Transaction, Budget, Report, Category } from '../models';
+import { User, Transaction, Budget, Report, Category, TaxEstimate } from '../models';
+import { ToastService } from './toast.service';
 
 @Injectable({
   providedIn: 'root'
@@ -12,8 +13,10 @@ export class DataService {
   public readonly budgets = signal<Budget[]>([]);
   public readonly reports = signal<Report[]>([]);
   public readonly categories = signal<Category[]>([]);
+  public readonly estimates = signal<TaxEstimate[]>([]);
 
   private readonly apiUrl = 'http://localhost:5000/api';
+  private readonly toastService = inject(ToastService);
 
   constructor(private http: HttpClient) {
     this.initDatabase();
@@ -63,9 +66,13 @@ export class DataService {
     const allCategories = this.getData<Category>('tp_categories');
     this.categories.set(allCategories.filter(c => c.userId === userId));
 
+    const allEstimates = this.getData<TaxEstimate>('tp_estimates');
+    this.estimates.set(allEstimates.filter(e => e.userId === userId));
+
     this.loadTransactionsFromServer();
     this.loadBudgetsFromServer();
     this.loadCategoriesFromServer();
+    this.loadEstimatesFromServer();
   }
 
   private getData<T>(key: string): T[] {
@@ -233,7 +240,10 @@ export class DataService {
     if (!user) return;
 
     this.http.get<Transaction[]>(`${this.apiUrl}/transactions`, { headers: this.getAuthHeaders() }).pipe(
-      catchError(() => of(this.getData<Transaction>('tp_transactions').filter(tx => tx.userId === user.id)))
+      catchError((err) => {
+        this.toastService.showError('Failed to load transactions from backend. Using local backup.');
+        return of(this.getData<Transaction>('tp_transactions').filter(tx => tx.userId === user.id));
+      })
     ).subscribe(data => {
       const mapped = data.map(tx => ({
         ...tx,
@@ -248,7 +258,8 @@ export class DataService {
     if (!user) return;
 
     this.http.get<any[]>(`${this.apiUrl}/budgets`, { headers: this.getAuthHeaders() }).pipe(
-      catchError(() => {
+      catchError((err) => {
+        this.toastService.showError('Failed to load budgets from backend. Using local backup.');
         const userId = user.id || (user as any)._id;
         return of(this.getData<Budget>('tp_budgets').filter(b => b.userId === userId));
       })
@@ -270,13 +281,32 @@ export class DataService {
     if (!user) return;
 
     this.http.get<Category[]>(`${this.apiUrl}/categories`, { headers: this.getAuthHeaders() }).pipe(
-      catchError(() => of(this.getData<Category>('tp_categories').filter(c => c.userId === user.id)))
+      catchError((err) => {
+        this.toastService.showError('Failed to load categories from backend. Using local backup.');
+        return of(this.getData<Category>('tp_categories').filter(c => c.userId === user.id));
+      })
     ).subscribe(data => {
       const mapped = data.map(c => ({
         ...c,
         id: c.id || (c as any)._id
       }));
       this.categories.set(mapped);
+    });
+  }
+
+  private loadEstimatesFromServer(): void {
+    const user = this.currentUser();
+    if (!user) return;
+
+    this.http.get<any>(`${this.apiUrl}/taxes/estimates`, { headers: this.getAuthHeaders() }).pipe(
+      catchError((err) => {
+        this.toastService.showError('Failed to load tax estimates from backend. Using local backup.');
+        const userId = user.id || (user as any)._id;
+        return of(this.getData<TaxEstimate>('tp_estimates').filter(e => e.userId === userId));
+      })
+    ).subscribe(res => {
+      const list = res.estimates || res.data || res || [];
+      this.estimates.set(Array.isArray(list) ? list : []);
     });
   }
 
@@ -296,7 +326,10 @@ export class DataService {
     this.transactions.update(items => [newTx, ...items]);
 
     this.http.post<any>(`${this.apiUrl}/transactions`, newTx, { headers: this.getAuthHeaders() }).pipe(
-      catchError(() => of(null))
+      catchError((err) => {
+        this.toastService.showError('Failed to sync new transaction to server.');
+        return of(null);
+      })
     ).subscribe(res => {
       if (res) {
         const serverId = res._id || res.id;
@@ -322,7 +355,10 @@ export class DataService {
     this.transactions.update(items => items.filter(t => t.id !== id && (t as any)._id !== id));
 
     this.http.delete(`${this.apiUrl}/transactions/${id}`, { headers: this.getAuthHeaders() }).pipe(
-      catchError(() => of(null))
+      catchError((err) => {
+        this.toastService.showError('Failed to sync transaction deletion to server.');
+        return of(null);
+      })
     ).subscribe();
   }
 
@@ -337,7 +373,10 @@ export class DataService {
     this.transactions.update(items => items.map(t => (t.id === id ? updatedTx : t)));
 
     this.http.put<Transaction>(`${this.apiUrl}/transactions/${id}`, updatedTx, { headers: this.getAuthHeaders() }).pipe(
-      catchError(() => of(null))
+      catchError((err) => {
+        this.toastService.showError('Failed to sync transaction update to server.');
+        return of(null);
+      })
     ).subscribe();
   }
 
@@ -365,7 +404,10 @@ export class DataService {
     };
 
     this.http.post<any>(`${this.apiUrl}/budgets`, backendPayload, { headers: this.getAuthHeaders() }).pipe(
-      catchError(() => of(null))
+      catchError((err) => {
+        this.toastService.showError('Failed to sync new budget to server.');
+        return of(null);
+      })
     ).subscribe(res => {
       if (res) {
         const serverId = res._id || res.id;
@@ -384,19 +426,22 @@ export class DataService {
 
   public deleteBudget(id: string): void {
     const allBudgets = this.getData<Budget>('tp_budgets');
-    const filtered = allBudgets.filter(b => b.id !== id);
+    const filtered = allBudgets.filter(b => b.id !== id && b._id !== id);
     this.saveData('tp_budgets', filtered);
 
-    this.budgets.update(items => items.filter(b => b.id !== id));
+    this.budgets.update(items => items.filter(b => b.id !== id && b._id !== id));
 
     this.http.delete(`${this.apiUrl}/budgets/${id}`, { headers: this.getAuthHeaders() }).pipe(
-      catchError(() => of(null))
+      catchError((err) => {
+        this.toastService.showError('Failed to sync budget deletion to server.');
+        return of(null);
+      })
     ).subscribe();
   }
 
   public updateBudget(id: string, changes: Omit<Budget, 'id' | 'userId'>): void {
     const allBudgets = this.getData<Budget>('tp_budgets');
-    const index = allBudgets.findIndex(b => b.id === id);
+    const index = allBudgets.findIndex(b => b.id === id || b._id === id);
     if (index === -1) return;
 
     const oldBudget = allBudgets[index];
@@ -415,7 +460,10 @@ export class DataService {
     };
 
     this.http.put<any>(`${this.apiUrl}/budgets/${id}`, backendPayload, { headers: this.getAuthHeaders() }).pipe(
-      catchError(() => of(null))
+      catchError((err) => {
+        this.toastService.showError('Failed to sync budget update to server.');
+        return of(null);
+      })
     ).subscribe();
   }
 
@@ -467,7 +515,10 @@ export class DataService {
     this.categories.update(items => [...items, newCat]);
 
     this.http.post<any>(`${this.apiUrl}/categories`, cat, { headers: this.getAuthHeaders() }).pipe(
-      catchError(() => of(null))
+      catchError((err) => {
+        this.toastService.showError('Failed to sync new category to server.');
+        return of(null);
+      })
     ).subscribe(res => {
       if (res) {
         const serverId = res._id || res.id;
@@ -493,7 +544,10 @@ export class DataService {
     this.categories.update(items => items.filter(c => c.id !== id && (c as any)._id !== id));
 
     this.http.delete(`${this.apiUrl}/categories/${id}`, { headers: this.getAuthHeaders() }).pipe(
-      catchError(() => of(null))
+      catchError((err) => {
+        this.toastService.showError('Failed to sync category deletion to server.');
+        return of(null);
+      })
     ).subscribe();
   }
 
