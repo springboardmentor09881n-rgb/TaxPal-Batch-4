@@ -1,4 +1,4 @@
-const Transaction = require('../models/Transaction.model');
+const Transaction = require('../models/transaction.model');
 
 // Get all transactions for a user
 exports.getTransactions = async (req, res) => {
@@ -53,5 +53,35 @@ exports.deleteTransaction = async (req, res) => {
   } catch (error) {
     console.error('Error deleting transaction:', error);
     res.status(500).json({ message: 'Server error deleting transaction' });
+  }
+};
+
+// Update a transaction
+exports.updateTransaction = async (req, res) => {
+  try {
+    const { type, amount, category, date, description, notes } = req.body;
+    let transaction = await Transaction.findById(req.params.id);
+
+    if (!transaction) {
+      return res.status(404).json({ message: 'Transaction not found' });
+    }
+
+    // Make sure user owns transaction
+    if (transaction.userId.toString() !== req.user.id.toString()) {
+      return res.status(401).json({ message: 'Not authorized' });
+    }
+
+    transaction.type = type || transaction.type;
+    transaction.amount = amount !== undefined ? amount : transaction.amount;
+    transaction.category = category || transaction.category;
+    transaction.date = date || transaction.date;
+    transaction.description = description || transaction.description;
+    transaction.notes = notes !== undefined ? notes : transaction.notes;
+
+    const updated = await transaction.save();
+    res.json(updated);
+  } catch (error) {
+    console.error('Error updating transaction:', error);
+    res.status(500).json({ message: 'Server error updating transaction' });
   }
 };

@@ -20,12 +20,15 @@ export interface Transaction {
 }
 
 export interface Budget {
-  id: string;
+  _id?: string;
+  id?: string;
   userId: string;
   category: string;
-  limit: number;
+  budget_amount: number;
   month: string;
   description?: string;
+  spent?: number;
+  remaining?: number;
 }
 
 export interface Report {
@@ -39,9 +42,35 @@ export interface Report {
 }
 
 export interface Category {
-  id: string;
-  userId: string;
+  _id?: string;
+  id?: string;
+  userId?: string;
   type: 'income' | 'expense';
   name: string;
   color: string;
+}
+
+export type TaxEstimateFilingStatus =
+  | 'SINGLE'
+  | 'MARRIED_FILING_JOINTLY'
+  | 'MARRIED_FILING_SEPARATELY'
+  | 'HEAD_OF_HOUSEHOLD'
+  | 'FIRM';
+
+export interface TaxEstimate {
+  _id?: string;
+  userId?: string;
+  country: string;
+  quarter: 'Q1' | 'Q2' | 'Q3' | 'Q4';
+  estimatedTax: number;
+  dueDate: string;
+  state: string;
+  filingStatus: TaxEstimateFilingStatus;
+  grossIncomeForQuarter: number;
+  businessExpenses: number;
+  retirementContributions: number;
+  healthInsurancePremiums: number;
+  homeOfficeDeductions: number;
+  createdAt?: string;
+  updatedAt?: string;
 }

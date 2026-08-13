@@ -1,7 +1,8 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, signal, inject } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { catchError, firstValueFrom, of } from 'rxjs';
-import { User, Transaction, Budget, Report, Category } from '../models';
+import { User, Transaction, Budget, Report, Category, TaxEstimate } from '../models';
+import { ToastService } from './toast.service';
 
 @Injectable({
   providedIn: 'root'
@@ -12,8 +13,10 @@ export class DataService {
   public readonly budgets = signal<Budget[]>([]);
   public readonly reports = signal<Report[]>([]);
   public readonly categories = signal<Category[]>([]);
+  public readonly estimates = signal<TaxEstimate[]>([]);
 
   private readonly apiUrl = 'http://localhost:5000/api';
+  private readonly toastService = inject(ToastService);
 
   constructor(private http: HttpClient) {
     this.initDatabase();
@@ -44,6 +47,7 @@ export class DataService {
     const sessionUser = sessionStorage.getItem('tp_active_user');
     if (sessionUser) {
       const parsedUser = JSON.parse(sessionUser) as User;
+      parsedUser.id = parsedUser.id || (parsedUser as any)._id;
       this.currentUser.set(parsedUser);
       this.loadUserData(parsedUser.id);
     }
@@ -62,7 +66,13 @@ export class DataService {
     const allCategories = this.getData<Category>('tp_categories');
     this.categories.set(allCategories.filter(c => c.userId === userId));
 
+    const allEstimates = this.getData<TaxEstimate>('tp_estimates');
+    this.estimates.set(allEstimates.filter(e => e.userId === userId));
+
     this.loadTransactionsFromServer();
+    this.loadBudgetsFromServer();
+    this.loadCategoriesFromServer();
+    this.loadEstimatesFromServer();
   }
 
   private getData<T>(key: string): T[] {
@@ -82,16 +92,23 @@ export class DataService {
   public async login(username: string, password: string): Promise<boolean> {
     try {
       const response = await firstValueFrom(
-        this.http.post<{ token: string; user: User }>(`${this.apiUrl}/auth/login`, { username, password }).pipe(
+        this.http.post<{ token: string; user: any }>(`${this.apiUrl}/auth/login`, { username, password }).pipe(
           catchError(() => of(null))
         )
       );
 
       if (response?.token && response.user) {
+        // Normalize: backend returns fullName, frontend expects name
+        const normalizedUser = {
+          ...response.user,
+          id: response.user.id || response.user._id,
+          name: response.user.name || response.user.fullName || response.user.username,
+          token: response.token,
+        };
         sessionStorage.setItem('tp_token', response.token);
-        sessionStorage.setItem('tp_active_user', JSON.stringify(response.user));
-        this.currentUser.set(response.user);
-        this.loadUserData(response.user.id);
+        sessionStorage.setItem('tp_active_user', JSON.stringify(normalizedUser));
+        this.currentUser.set(normalizedUser);
+        this.loadUserData(normalizedUser.id || normalizedUser._id);
         return true;
       }
     } catch {
@@ -102,9 +119,14 @@ export class DataService {
     const user = users.find((u: any) => u.username === username.trim() && u.password === password.trim());
     if (user) {
       const { password: _, ...userSession } = user;
-      sessionStorage.setItem('tp_active_user', JSON.stringify(userSession));
-      this.currentUser.set(userSession);
-      this.loadUserData(userSession.id);
+      // Ensure name is always set
+      const normalizedSession = {
+        ...userSession,
+        name: userSession.name || userSession.fullName || userSession.username,
+      };
+      sessionStorage.setItem('tp_active_user', JSON.stringify(normalizedSession));
+      this.currentUser.set(normalizedSession);
+      this.loadUserData(normalizedSession.id);
       return true;
     }
     return false;
@@ -118,8 +140,7 @@ export class DataService {
           password: signupData.password,
           fullName: signupData.name,
           email: signupData.email,
-          country: 'India',
-          state: signupData.state || 'Maharashtra',
+          country: signupData.country || 'India',
           incomeBracket: signupData.incomeBracket || 'Medium'
         }).pipe(catchError(() => of(null)))
       );
@@ -142,8 +163,7 @@ export class DataService {
       password: signupData.password,
       name: signupData.name,
       email: signupData.email,
-      country: 'India',
-      state: signupData.state || 'Maharashtra',
+      country: signupData.country || 'India',
       incomeBracket: signupData.incomeBracket || 'Medium'
     };
 
@@ -154,6 +174,55 @@ export class DataService {
     this.seedDefaultTransactions(newUser.id);
 
     return this.login(newUser.username, newUser.password);
+  }
+
+  public async forgotPassword(email: string): Promise<{ success: boolean; message: string }> {
+    try {
+      const response = await firstValueFrom(
+        this.http.post<{ message: string }>(`${this.apiUrl}/auth/forgot-password`, { email }).pipe(
+          catchError((err) => of({ message: err?.error?.message || 'Error sending reset email.' }))
+        )
+      );
+      return { success: true, message: response?.message || 'Reset email sent.' };
+    } catch {
+      return { success: false, message: 'Unable to connect. Please try again.' };
+    }
+  }
+
+  public async resetPassword(token: string, newPassword: string): Promise<{ success: boolean; message: string }> {
+    try {
+      const response = await firstValueFrom(
+        this.http.post<{ message: string }>(`${this.apiUrl}/auth/reset-password`, { token, newPassword }).pipe(
+          catchError((err) => of({ message: err?.error?.message || 'Reset failed.', __error: true } as any))
+        )
+      );
+      if ((response as any).__error) {
+        return { success: false, message: response.message };
+      }
+      return { success: true, message: response.message };
+    } catch {
+      return { success: false, message: 'Unable to connect. Please try again.' };
+    }
+  }
+
+  public async changePassword(currentPassword: string, newPassword: string): Promise<{ success: boolean; message: string }> {
+    try {
+      const response = await firstValueFrom(
+        this.http.put<{ message: string }>(
+          `${this.apiUrl}/auth/change-password`,
+          { currentPassword, newPassword },
+          { headers: this.getAuthHeaders() }
+        ).pipe(
+          catchError((err) => of({ message: err?.error?.message || 'Password update failed.', __error: true } as any))
+        )
+      );
+      if ((response as any).__error) {
+        return { success: false, message: response.message };
+      }
+      return { success: true, message: response.message };
+    } catch {
+      return { success: false, message: 'Unable to connect. Please try again.' };
+    }
   }
 
   public logout(): void {
@@ -171,8 +240,74 @@ export class DataService {
     if (!user) return;
 
     this.http.get<Transaction[]>(`${this.apiUrl}/transactions`, { headers: this.getAuthHeaders() }).pipe(
-      catchError(() => of(this.getData<Transaction>('tp_transactions').filter(tx => tx.userId === user.id)))
-    ).subscribe(data => this.transactions.set(data));
+      catchError((err) => {
+        this.toastService.showError('Failed to load transactions from backend. Using local backup.');
+        return of(this.getData<Transaction>('tp_transactions').filter(tx => tx.userId === user.id));
+      })
+    ).subscribe(data => {
+      const mapped = data.map(tx => ({
+        ...tx,
+        id: tx.id || (tx as any)._id
+      }));
+      this.transactions.set(mapped);
+    });
+  }
+
+  private loadBudgetsFromServer(): void {
+    const user = this.currentUser();
+    if (!user) return;
+
+    this.http.get<any[]>(`${this.apiUrl}/budgets`, { headers: this.getAuthHeaders() }).pipe(
+      catchError((err) => {
+        this.toastService.showError('Failed to load budgets from backend. Using local backup.');
+        const userId = user.id || (user as any)._id;
+        return of(this.getData<Budget>('tp_budgets').filter(b => b.userId === userId));
+      })
+    ).subscribe(data => {
+      const mapped: Budget[] = data.map(b => ({
+        id: b._id || b.id,
+        userId: b.userId,
+        category: b.category,
+        budget_amount: b.budget_amount !== undefined ? b.budget_amount : (b.limit || 0),
+        month: b.month,
+        description: b.description
+      }));
+      this.budgets.set(mapped);
+    });
+  }
+
+  private loadCategoriesFromServer(): void {
+    const user = this.currentUser();
+    if (!user) return;
+
+    this.http.get<Category[]>(`${this.apiUrl}/categories`, { headers: this.getAuthHeaders() }).pipe(
+      catchError((err) => {
+        this.toastService.showError('Failed to load categories from backend. Using local backup.');
+        return of(this.getData<Category>('tp_categories').filter(c => c.userId === user.id));
+      })
+    ).subscribe(data => {
+      const mapped = data.map(c => ({
+        ...c,
+        id: c.id || (c as any)._id
+      }));
+      this.categories.set(mapped);
+    });
+  }
+
+  private loadEstimatesFromServer(): void {
+    const user = this.currentUser();
+    if (!user) return;
+
+    this.http.get<any>(`${this.apiUrl}/taxes/estimates`, { headers: this.getAuthHeaders() }).pipe(
+      catchError((err) => {
+        this.toastService.showError('Failed to load tax estimates from backend. Using local backup.');
+        const userId = user.id || (user as any)._id;
+        return of(this.getData<TaxEstimate>('tp_estimates').filter(e => e.userId === userId));
+      })
+    ).subscribe(res => {
+      const list = res.estimates || res.data || res || [];
+      this.estimates.set(Array.isArray(list) ? list : []);
+    });
   }
 
   public addTransaction(tx: Omit<Transaction, 'id' | 'userId'>): void {
@@ -182,7 +317,7 @@ export class DataService {
     const newTx: Transaction = {
       ...tx,
       id: 'tx_' + Date.now(),
-      userId: user.id
+      userId: user.id || (user as any)._id
     };
 
     const allTx = this.getData<Transaction>('tp_transactions');
@@ -190,19 +325,58 @@ export class DataService {
     this.saveData('tp_transactions', allTx);
     this.transactions.update(items => [newTx, ...items]);
 
-    this.http.post<Transaction>(`${this.apiUrl}/transactions`, newTx, { headers: this.getAuthHeaders() }).pipe(
-      catchError(() => of(null))
-    ).subscribe();
+    this.http.post<any>(`${this.apiUrl}/transactions`, newTx, { headers: this.getAuthHeaders() }).pipe(
+      catchError((err) => {
+        this.toastService.showError('Failed to sync new transaction to server.');
+        return of(null);
+      })
+    ).subscribe(res => {
+      if (res) {
+        const serverId = res._id || res.id;
+        // Update local signal state ID
+        this.transactions.update(items =>
+          items.map(t => t.id === newTx.id ? { ...t, id: serverId } : t)
+        );
+        // Update localStorage ID
+        const currentAll = this.getData<Transaction>('tp_transactions');
+        const idx = currentAll.findIndex(t => t.id === newTx.id);
+        if (idx !== -1) {
+          currentAll[idx].id = serverId;
+          this.saveData('tp_transactions', currentAll);
+        }
+      }
+    });
   }
 
   public deleteTransaction(id: string): void {
     const allTx = this.getData<Transaction>('tp_transactions');
-    const filtered = allTx.filter(t => t.id !== id);
+    const filtered = allTx.filter(t => t.id !== id && (t as any)._id !== id);
     this.saveData('tp_transactions', filtered);
-    this.transactions.update(items => items.filter(t => t.id !== id));
+    this.transactions.update(items => items.filter(t => t.id !== id && (t as any)._id !== id));
 
     this.http.delete(`${this.apiUrl}/transactions/${id}`, { headers: this.getAuthHeaders() }).pipe(
-      catchError(() => of(null))
+      catchError((err) => {
+        this.toastService.showError('Failed to sync transaction deletion to server.');
+        return of(null);
+      })
+    ).subscribe();
+  }
+
+  public updateTransaction(id: string, changes: Omit<Transaction, 'id' | 'userId'>): void {
+    const allTx = this.getData<Transaction>('tp_transactions');
+    const index = allTx.findIndex(t => t.id === id);
+    if (index === -1) return;
+
+    const updatedTx: Transaction = { ...allTx[index], ...changes };
+    allTx[index] = updatedTx;
+    this.saveData('tp_transactions', allTx);
+    this.transactions.update(items => items.map(t => (t.id === id ? updatedTx : t)));
+
+    this.http.put<Transaction>(`${this.apiUrl}/transactions/${id}`, updatedTx, { headers: this.getAuthHeaders() }).pipe(
+      catchError((err) => {
+        this.toastService.showError('Failed to sync transaction update to server.');
+        return of(null);
+      })
     ).subscribe();
   }
 
@@ -213,7 +387,7 @@ export class DataService {
     const newBudget: Budget = {
       ...budget,
       id: 'bgt_' + Date.now(),
-      userId: user.id
+      userId: user.id || (user as any)._id
     };
 
     const allBudgets = this.getData<Budget>('tp_budgets');
@@ -221,14 +395,107 @@ export class DataService {
     this.saveData('tp_budgets', allBudgets);
 
     this.budgets.update(items => [...items, newBudget]);
+
+    const backendPayload = {
+      category: budget.category,
+      budget_amount: budget.budget_amount,
+      month: budget.month,
+      description: budget.description
+    };
+
+    this.http.post<any>(`${this.apiUrl}/budgets`, backendPayload, { headers: this.getAuthHeaders() }).pipe(
+      catchError((err) => {
+        this.toastService.showError('Failed to sync new budget to server.');
+        return of(null);
+      })
+    ).subscribe(res => {
+      if (res) {
+        const serverId = res._id || res.id;
+        this.budgets.update(items =>
+          items.map(b => b.id === newBudget.id ? { ...b, id: serverId } : b)
+        );
+        const currentAll = this.getData<Budget>('tp_budgets');
+        const idx = currentAll.findIndex(b => b.id === newBudget.id);
+        if (idx !== -1) {
+          currentAll[idx].id = serverId;
+          this.saveData('tp_budgets', currentAll);
+        }
+      }
+    });
   }
 
   public deleteBudget(id: string): void {
     const allBudgets = this.getData<Budget>('tp_budgets');
-    const filtered = allBudgets.filter(b => b.id !== id);
+    const filtered = allBudgets.filter(b => b.id !== id && b._id !== id);
     this.saveData('tp_budgets', filtered);
 
-    this.budgets.update(items => items.filter(b => b.id !== id));
+    this.budgets.update(items => items.filter(b => b.id !== id && b._id !== id));
+
+    this.http.delete(`${this.apiUrl}/budgets/${id}`, { headers: this.getAuthHeaders() }).pipe(
+      catchError((err) => {
+        this.toastService.showError('Failed to sync budget deletion to server.');
+        return of(null);
+      })
+    ).subscribe();
+  }
+
+  public updateBudget(id: string, changes: Omit<Budget, 'id' | 'userId'>): void {
+    const allBudgets = this.getData<Budget>('tp_budgets');
+    const index = allBudgets.findIndex(b => b.id === id || b._id === id);
+    if (index === -1) return;
+
+    const oldBudget = allBudgets[index];
+    const spent = oldBudget.spent || 0;
+    const remaining = (changes.budget_amount !== undefined ? changes.budget_amount : (oldBudget.budget_amount || 0)) - spent;
+    const updatedBudget: Budget = { ...oldBudget, ...changes, spent, remaining };
+    allBudgets[index] = updatedBudget;
+    this.saveData('tp_budgets', allBudgets);
+    this.budgets.update(items => items.map(b => (b.id === id || b._id === id ? updatedBudget : b)));
+
+    const backendPayload = {
+      category: changes.category,
+      budget_amount: changes.budget_amount,
+      month: changes.month,
+      description: changes.description
+    };
+
+    this.http.put<any>(`${this.apiUrl}/budgets/${id}`, backendPayload, { headers: this.getAuthHeaders() }).pipe(
+      catchError((err) => {
+        this.toastService.showError('Failed to sync budget update to server.');
+        return of(null);
+      })
+    ).subscribe();
+  }
+
+  public renameCategoryCascade(oldName: string, newName: string, type: 'income' | 'expense'): void {
+    // 1. Cascade rename in transactions
+    const txsToUpdate = this.transactions().filter(t => t.category === oldName && t.type === type);
+    txsToUpdate.forEach(t => {
+      this.updateTransaction(t.id, {
+        type: t.type,
+        description: t.description,
+        category: newName,
+        amount: t.amount,
+        date: t.date,
+        notes: t.notes
+      });
+    });
+
+    // 2. Cascade rename in budgets (expenses only)
+    if (type === 'expense') {
+      const budgetsToUpdate = this.budgets().filter(b => b.category === oldName);
+      budgetsToUpdate.forEach(b => {
+        const targetId = b.id || b._id;
+        if (targetId) {
+          this.updateBudget(targetId, {
+            category: newName,
+            budget_amount: b.budget_amount,
+            month: b.month,
+            description: b.description
+          });
+        }
+      });
+    }
   }
 
   public addCategory(cat: Omit<Category, 'id' | 'userId'>): void {
@@ -238,7 +505,7 @@ export class DataService {
     const newCat: Category = {
       ...cat,
       id: 'cat_' + Date.now(),
-      userId: user.id
+      userId: user.id || (user as any)._id
     };
 
     const allCats = this.getData<Category>('tp_categories');
@@ -246,14 +513,42 @@ export class DataService {
     this.saveData('tp_categories', allCats);
 
     this.categories.update(items => [...items, newCat]);
+
+    this.http.post<any>(`${this.apiUrl}/categories`, cat, { headers: this.getAuthHeaders() }).pipe(
+      catchError((err) => {
+        this.toastService.showError('Failed to sync new category to server.');
+        return of(null);
+      })
+    ).subscribe(res => {
+      if (res) {
+        const serverId = res._id || res.id;
+        this.categories.update(items =>
+          items.map(c => c.id === newCat.id ? { ...c, id: serverId, _id: serverId } : c)
+        );
+        const currentAll = this.getData<Category>('tp_categories');
+        const idx = currentAll.findIndex(c => c.id === newCat.id);
+        if (idx !== -1) {
+          currentAll[idx].id = serverId;
+          currentAll[idx]._id = serverId;
+          this.saveData('tp_categories', currentAll);
+        }
+      }
+    });
   }
 
   public deleteCategory(id: string): void {
     const allCats = this.getData<Category>('tp_categories');
-    const filtered = allCats.filter(c => c.id !== id);
+    const filtered = allCats.filter(c => c.id !== id && (c as any)._id !== id);
     this.saveData('tp_categories', filtered);
 
-    this.categories.update(items => items.filter(c => c.id !== id));
+    this.categories.update(items => items.filter(c => c.id !== id && (c as any)._id !== id));
+
+    this.http.delete(`${this.apiUrl}/categories/${id}`, { headers: this.getAuthHeaders() }).pipe(
+      catchError((err) => {
+        this.toastService.showError('Failed to sync category deletion to server.');
+        return of(null);
+      })
+    ).subscribe();
   }
 
   public generateReport(reportType: string, period: string, format: 'PDF' | 'CSV'): void {
@@ -348,11 +643,11 @@ export class DataService {
     const currentMonth = new Date().toISOString().slice(0, 7);
 
     const defaults: Omit<Budget, 'id' | 'userId'>[] = [
-      { category: 'Office Rent', limit: 25000.00, month: currentMonth, description: 'Mumbai hotdesk' },
-      { category: 'Business Expenses', limit: 20000.00, month: currentMonth, description: 'Server and advertising allotments' },
-      { category: 'Software Subscriptions', limit: 8000.00, month: currentMonth },
-      { category: 'Utilities', limit: 5000.00, month: currentMonth },
-      { category: 'Meals & Entertainment', limit: 10000.00, month: currentMonth }
+      { category: 'Office Rent', budget_amount: 25000.00, month: currentMonth, description: 'Mumbai hotdesk' },
+      { category: 'Business Expenses', budget_amount: 20000.00, month: currentMonth, description: 'Server and advertising allotments' },
+      { category: 'Software Subscriptions', budget_amount: 8000.00, month: currentMonth },
+      { category: 'Utilities', budget_amount: 5000.00, month: currentMonth },
+      { category: 'Meals & Entertainment', budget_amount: 10000.00, month: currentMonth }
     ];
 
     const allBudgets = this.getData<Budget>('tp_budgets');

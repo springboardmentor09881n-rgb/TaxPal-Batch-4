@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const User = require('./User.model');
+const User = require('./user.model');
 
 const transactionSchema = new mongoose.Schema({
   userId: {
@@ -33,6 +33,8 @@ const transactionSchema = new mongoose.Schema({
   },
 }, {
   timestamps: true,
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true }
 });
 
-module.exports = mongoose.model('Transaction', transactionSchema);
+module.exports = mongoose.models.Transaction || mongoose.model('Transaction', transactionSchema);

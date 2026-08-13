@@ -18,4 +18,9 @@ router.post('/', auth, transactionController.createTransaction);
 // @access  Private
 router.delete('/:id', auth, transactionController.deleteTransaction);
 
+// @route   PUT api/transactions/:id
+// @desc    Update transaction
+// @access  Private
+router.put('/:id', auth, transactionController.updateTransaction);
+
 module.exports = router;
