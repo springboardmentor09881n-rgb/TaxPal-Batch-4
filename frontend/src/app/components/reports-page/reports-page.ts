@@ -15,7 +15,7 @@ const CURRENCY_BY_COUNTRY: Record<string, string> = {
   'Singapore': 'S$',
   'United Arab Emirates': 'AED',
 };
-
+  
 const NON_QUARTER_PERIODS: ReportPeriodKey[] = ['current_month', 'last_month', 'current_year'];
 
 @Component({
