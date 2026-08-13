@@ -1,7 +1,24 @@
 const Report = require('../models/report.model');
 const Transaction = require('../models/transaction.model');
+const User = require('../models/User.model');
 const PDFDocument = require('pdfkit');
 const { Parser } = require('json2csv');
+
+// Maps a user's registered country to the correct currency symbol
+const getCurrencySymbol = (country) => {
+  const map = {
+    'United States': '$',
+    'India': '\u20b9',
+    'United Kingdom': '\u00a3',
+    'European Union': '\u20ac',
+    'Japan': '\u00a5',
+    'Canada': 'CA$',
+    'Australia': 'A$',
+    'Singapore': 'S$',
+    'United Arab Emirates': 'AED ',
+  };
+  return map[country] || '$';
+};
 
 exports.getReports = async (req, res) => {
   try {
@@ -97,6 +114,10 @@ exports.downloadReport = async (req, res) => {
       date: { $gte: report.startDate, $lte: report.endDate }
     }).sort({ date: 1 });
 
+    // Derive currency symbol from the user's registered country
+    const user = await User.findById(req.user.id).select('country');
+    const currencySymbol = getCurrencySymbol(user ? user.country : '');
+
     if (report.format === 'PDF') {
       const doc = new PDFDocument();
       let filename = `${report.name.replace(/\s+/g, '_')}.pdf`;
@@ -123,9 +144,9 @@ exports.downloadReport = async (req, res) => {
 
       if (report.reportType === 'Income Statement' || report.reportType === 'Tax Summary') {
         doc.fontSize(16).text('Summary');
-        doc.fontSize(12).text(`Total Income: $${totalIncome.toFixed(2)}`);
-        doc.text(`Total Expense: $${totalExpense.toFixed(2)}`);
-        doc.text(`Net Income: $${(totalIncome - totalExpense).toFixed(2)}`);
+        doc.fontSize(12).text(`Total Income: ${currencySymbol}${totalIncome.toFixed(2)}`);
+        doc.text(`Total Expense: ${currencySymbol}${totalExpense.toFixed(2)}`);
+        doc.text(`Net Income: ${currencySymbol}${(totalIncome - totalExpense).toFixed(2)}`);
         doc.moveDown();
       }
 
@@ -155,10 +176,14 @@ exports.downloadReport = async (req, res) => {
         doc.fontSize(10).text(new Date(t.date).toLocaleDateString(), dateX, y);
         doc.text(t.description || t.category, descX, y);
         doc.text(t.type, typeX, y);
-        doc.text(`$${t.amount.toFixed(2)}`, amountX, y);
+        doc.text(`${currencySymbol}${t.amount.toFixed(2)}`, amountX, y);
         
         y += 20;
       });
+
+      // Persist the download URL path in the report document
+      const filePath = `/api/reports/${report._id}/download`;
+      await Report.findByIdAndUpdate(report._id, { filePath });
 
       doc.end();
     } else if (report.format === 'CSV') {

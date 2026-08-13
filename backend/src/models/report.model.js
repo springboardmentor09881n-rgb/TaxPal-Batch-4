@@ -14,7 +14,8 @@ const reportSchema = new mongoose.Schema({
   period: {
     type: String,
     required: true,
-    enum: ['Current Month', 'Last Month', 'Current Quarter', 'Last Quarter', 'Year to Date'],
+    // No enum restriction — supports both preset labels (e.g. 'Current Month')
+    // and custom period strings (e.g. 'Jan 2025', 'Q2 2024')
   },
   format: {
     type: String,
@@ -36,6 +37,10 @@ const reportSchema = new mongoose.Schema({
   generatedDate: {
     type: Date,
     default: Date.now,
+  },
+  filePath: {
+    type: String,
+    default: null,
   }
 }, {
   timestamps: true
