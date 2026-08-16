@@ -1,6 +1,7 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { DataService } from './data.service';
 import { Transaction } from '../models';
+import jsPDF from 'jspdf';
 
 export type ReportType = 'income_statement' | 'tax_summary' | 'budget_performance';
 export type ReportPeriodKey = 'current_month' | 'last_month' | 'q1' | 'q2' | 'q3' | 'q4' | 'current_year';
@@ -177,7 +178,9 @@ export class ReportService {
     this.writeAllToStorage(all);
     this.refresh();
 
-    format === 'CSV' ? this.downloadReportCSV(report) : this.downloadReportPDF(report);
+    // No auto-download here — generating a report only saves it to the list
+    // and shows it in the preview. Downloading happens only when the user
+    // explicitly clicks the Download button.
 
     return report;
   }
@@ -291,26 +294,114 @@ export class ReportService {
     return rows.join('\n');
   }
 
+  /** Generates a real PDF file and saves it to disk (no print dialog). */
   downloadReportPDF(report: GeneratedReport): void {
-    const iframe = document.createElement('iframe');
-    Object.assign(iframe.style, { position: 'fixed', right: '0', bottom: '0', width: '0', height: '0', border: '0' });
-    document.body.appendChild(iframe);
+    const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
+    const { data } = report;
+    const marginX = 40;
+    let y = 50;
+    const lineHeight = 16;
+    const pageHeight = pdf.internal.pageSize.getHeight();
 
-    const doc = iframe.contentWindow?.document;
-    if (!doc) {
-      document.body.removeChild(iframe);
-      return;
+    const ensureSpace = (extra = lineHeight) => {
+      if (y + extra > pageHeight - 40) {
+        pdf.addPage();
+        y = 50;
+      }
+    };
+
+    // Title block
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(16);
+    pdf.text('TaxPal', marginX, y);
+    pdf.setFontSize(13);
+    pdf.text(REPORT_TYPE_LABEL[report.type], marginX, (y += 22));
+
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(9);
+    pdf.setTextColor(90);
+    pdf.text(`${report.periodLabel}  |  Generated ${report.generatedDate}`, marginX, (y += 16));
+    pdf.setTextColor(20);
+    y += 20;
+
+    // Summary
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(11);
+    pdf.text('Summary', marginX, y);
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(10);
+    y += lineHeight;
+    pdf.text(`Total Income: ${data.totalIncome.toFixed(2)}`, marginX, y); y += lineHeight;
+    pdf.text(`Total Expenses: ${data.totalExpenses.toFixed(2)}`, marginX, y); y += lineHeight;
+    pdf.text(`Net: ${data.net.toFixed(2)}`, marginX, y); y += lineHeight;
+    if (data.estimatedTax !== undefined) {
+      pdf.text(`Estimated Tax: ${data.estimatedTax.toFixed(2)}`, marginX, y); y += lineHeight;
+    }
+    y += 10;
+
+    const renderBreakdownTable = (title: string, rows: CategoryBreakdownRow[]) => {
+      ensureSpace(24);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(11);
+      pdf.text(title, marginX, y);
+      y += lineHeight;
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(10);
+      if (!rows.length) {
+        pdf.text('No transactions recorded.', marginX, y);
+        y += lineHeight;
+      } else {
+        rows.forEach(r => {
+          ensureSpace();
+          pdf.text(r.category, marginX, y);
+          pdf.text(`${r.amount.toFixed(2)} (${r.percentage.toFixed(1)}%)`, marginX + 300, y);
+          y += lineHeight;
+        });
+      }
+      y += 10;
+    };
+
+    renderBreakdownTable('Income by Category', data.incomeBreakdown);
+    renderBreakdownTable('Expenses by Category', data.expenseBreakdown);
+
+    if (data.budgetComparison?.length) {
+      ensureSpace(24);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(11);
+      pdf.text('Budget vs Actual', marginX, y);
+      y += lineHeight;
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(10);
+      data.budgetComparison.forEach(r => {
+        ensureSpace();
+        pdf.text(r.category, marginX, y);
+        pdf.text(`Budgeted ${r.budgeted.toFixed(2)}  Spent ${r.spent.toFixed(2)}`, marginX + 200, y);
+        y += lineHeight;
+      });
+      y += 10;
     }
 
-    doc.open();
-    doc.write(this.buildPrintableHtml(report));
-    doc.close();
+    ensureSpace(24);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(11);
+    pdf.text('Transactions', marginX, y);
+    y += lineHeight;
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(9);
+    if (!data.transactions.length) {
+      pdf.text('No transactions found.', marginX, y);
+      y += lineHeight;
+    } else {
+      data.transactions.forEach(t => {
+        ensureSpace();
+        const sign = t.type === 'income' ? '+' : '-';
+        pdf.text(`${t.date}  ${t.category}  ${t.description || ''}`.slice(0, 70), marginX, y);
+        pdf.text(`${sign}${(t.amount || 0).toFixed(2)}`, marginX + 400, y);
+        y += 14;
+      });
+    }
 
-    setTimeout(() => {
-      iframe.contentWindow?.focus();
-      iframe.contentWindow?.print();
-      setTimeout(() => document.body.removeChild(iframe), 500);
-    }, 200);
+    pdf.save(`${this.slugify(report.name)}.pdf`);
   }
 
   private buildPrintableHtml(report: GeneratedReport): string {
