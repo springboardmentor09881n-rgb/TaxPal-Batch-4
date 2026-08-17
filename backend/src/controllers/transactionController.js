@@ -1,8 +1,27 @@
 const Transaction = require('../models/Transaction.model');
 
-// Get all transactions for a user
+// Get transactions for a user (Supports optional pagination: ?page=1&limit=50)
 exports.getTransactions = async (req, res) => {
   try {
+    const page = parseInt(req.query.page, 10);
+    const limit = parseInt(req.query.limit, 10);
+
+    if (!isNaN(page) && !isNaN(limit) && page > 0 && limit > 0) {
+      const skip = (page - 1) * limit;
+      const [transactions, total] = await Promise.all([
+        Transaction.find({ userId: req.user.id }).sort({ date: -1 }).skip(skip).limit(limit),
+        Transaction.countDocuments({ userId: req.user.id })
+      ]);
+      return res.json({
+        transactions,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+      });
+    }
+
+    // Default: Return all transactions sorted by date
     const transactions = await Transaction.find({ userId: req.user.id }).sort({ date: -1 });
     res.json(transactions);
   } catch (error) {
