@@ -46,26 +46,36 @@ import { ChatbotWidgetComponent } from '../../components/chatbot-widget/chatbot-
         </div>
       }
 
-      <!-- Floating Error Toast Alerts overlay -->
+      <!-- Floating Toast Alerts Overlay -->
       <div class="fixed bottom-5 right-5 z-[9999] space-y-3 pointer-events-none max-w-sm w-full px-4">
-        @for (err of toastService.errors(); track err.id) {
+        @for (toast of toastService.toasts(); track toast.id) {
           <div
-            class="pointer-events-auto flex items-start gap-3.5 px-4 py-3.5 rounded-xl border border-red-200 bg-white/95 text-slate-800 shadow-xl shadow-red-950/5 backdrop-blur-md transition-all animate-[fadeInUp_0.2s_ease-out]"
+            class="pointer-events-auto flex items-start gap-3.5 px-4 py-3.5 rounded-xl border bg-white/95 text-slate-800 shadow-xl backdrop-blur-md transition-all animate-[fadeInUp_0.2s_ease-out]"
+            [class.border-red-200]="toast.type === 'error'"
+            [class.shadow-red-950\/5]="toast.type === 'error'"
+            [class.border-emerald-200]="toast.type === 'success'"
+            [class.shadow-emerald-950\/5]="toast.type === 'success'"
           >
-            <div class="shrink-0 text-red-500 mt-0.5">
-              <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
+            <div class="shrink-0 mt-0.5" [class.text-red-500]="toast.type === 'error'" [class.text-emerald-500]="toast.type === 'success'">
+              @if (toast.type === 'error') {
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              } @else {
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              }
             </div>
             <div class="flex-1 min-w-0">
-              <p class="text-xs font-bold text-slate-900">Network / API Error</p>
-              <p class="text-[11px] text-slate-600 mt-1 leading-normal font-medium">{{ err.message }}</p>
+              <p class="text-xs font-bold text-slate-900">{{ toast.title || (toast.type === 'error' ? 'Network / API Error' : 'Success') }}</p>
+              <p class="text-[11px] text-slate-600 mt-1 leading-normal font-medium">{{ toast.message }}</p>
             </div>
             <button
               type="button"
-              (click)="toastService.dismiss(err.id)"
+              (click)="toastService.dismiss(toast.id)"
               class="shrink-0 text-slate-400 hover:text-slate-600 bg-transparent border-0 cursor-pointer font-bold text-sm leading-none ml-auto"
-              aria-label="Dismiss Error"
+              aria-label="Dismiss Toast"
             >
               ×
             </button>

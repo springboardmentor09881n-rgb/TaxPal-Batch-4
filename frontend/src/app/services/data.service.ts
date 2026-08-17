@@ -1,7 +1,7 @@
 import { Injectable, signal, inject } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { catchError, firstValueFrom, of } from 'rxjs';
-import { User, Transaction, Budget, Report, Category, TaxEstimate } from '../models';
+import { User, Transaction, Budget, Category, TaxEstimate } from '../models';
 import { ToastService } from './toast.service';
 import { environment } from '../../environments/environment';
 
@@ -23,27 +23,6 @@ export class DataService {
   }
 
   private initDatabase(): void {
-    const usersStr = localStorage.getItem('tp_users');
-    let users = usersStr ? JSON.parse(usersStr) : [];
-
-    if (users.length === 0) {
-      users.push({
-        id: 'user_demo',
-        username: 'demo',
-        password: 'password',
-        name: 'Alex Morgan',
-        email: 'alex@example.com',
-        country: 'India',
-        state: 'Maharashtra',
-        incomeBracket: 'Medium'
-      });
-      localStorage.setItem('tp_users', JSON.stringify(users));
-
-      this.seedDefaultCategories('user_demo');
-      this.seedDefaultTransactions('user_demo');
-      this.seedDefaultBudgets('user_demo');
-    }
-
     const sessionUser = sessionStorage.getItem('tp_active_user');
     if (sessionUser) {
       const parsedUser = JSON.parse(sessionUser) as User;
@@ -54,31 +33,10 @@ export class DataService {
   }
 
   public loadUserData(userId: string): void {
-    const allTx = this.getData<Transaction>('tp_transactions');
-    this.transactions.set(allTx.filter(t => t.userId === userId));
-
-    const allBudgets = this.getData<Budget>('tp_budgets');
-    this.budgets.set(allBudgets.filter(b => b.userId === userId));
-
-    const allCategories = this.getData<Category>('tp_categories');
-    this.categories.set(allCategories.filter(c => c.userId === userId));
-
-    const allEstimates = this.getData<TaxEstimate>('tp_estimates');
-    this.estimates.set(allEstimates.filter(e => e.userId === userId));
-
     this.loadTransactionsFromServer();
     this.loadBudgetsFromServer();
     this.loadCategoriesFromServer();
     this.loadEstimatesFromServer();
-  }
-
-  private getData<T>(key: string): T[] {
-    const data = localStorage.getItem(key);
-    return data ? JSON.parse(data) : [];
-  }
-
-  private saveData<T>(key: string, data: T[]): void {
-    localStorage.setItem(key, JSON.stringify(data));
   }
 
   private getAuthHeaders(): HttpHeaders {
@@ -95,7 +53,6 @@ export class DataService {
       );
 
       if (response?.token && response.user) {
-        // Normalize: backend returns fullName, frontend expects name
         const normalizedUser = {
           ...response.user,
           id: response.user.id || response.user._id,
@@ -109,22 +66,7 @@ export class DataService {
         return true;
       }
     } catch {
-      // fallback below
-    }
-
-    const users = this.getData<any>('tp_users');
-    const user = users.find((u: any) => u.username === username.trim() && u.password === password.trim());
-    if (user) {
-      const { password: _, ...userSession } = user;
-      // Ensure name is always set
-      const normalizedSession = {
-        ...userSession,
-        name: userSession.name || userSession.fullName || userSession.username,
-      };
-      sessionStorage.setItem('tp_active_user', JSON.stringify(normalizedSession));
-      this.currentUser.set(normalizedSession);
-      this.loadUserData(normalizedSession.id);
-      return true;
+      // Return false on login error
     }
     return false;
   }
@@ -146,31 +88,9 @@ export class DataService {
         return this.login(signupData.username, signupData.password);
       }
     } catch {
-      // fallback below
+      // Return false on signup error
     }
-
-    const users = this.getData<any>('tp_users');
-    if (users.some((u: any) => u.username === signupData.username)) {
-      return false;
-    }
-
-    const newUser = {
-      id: 'user_' + Date.now(),
-      username: signupData.username,
-      password: signupData.password,
-      name: signupData.name,
-      email: signupData.email,
-      country: signupData.country || 'India',
-      incomeBracket: signupData.incomeBracket || 'Medium'
-    };
-
-    users.push(newUser);
-    this.saveData('tp_users', users);
-    this.seedDefaultCategories(newUser.id);
-    this.seedDefaultBudgets(newUser.id);
-    this.seedDefaultTransactions(newUser.id);
-
-    return this.login(newUser.username, newUser.password);
+    return false;
   }
 
   public async forgotPassword(email: string): Promise<{ success: boolean; message: string }> {
@@ -229,6 +149,7 @@ export class DataService {
     this.transactions.set([]);
     this.budgets.set([]);
     this.categories.set([]);
+    this.estimates.set([]);
   }
 
   private loadTransactionsFromServer(): void {
@@ -236,9 +157,9 @@ export class DataService {
     if (!user) return;
 
     this.http.get<Transaction[]>(`${this.apiUrl}/transactions`, { headers: this.getAuthHeaders() }).pipe(
-      catchError((err) => {
-        this.toastService.showError('Failed to load transactions from backend. Using local backup.');
-        return of(this.getData<Transaction>('tp_transactions').filter(tx => tx.userId === user.id));
+      catchError(() => {
+        this.toastService.showError('Failed to load transactions from server.');
+        return of([]);
       })
     ).subscribe(data => {
       const mapped = data.map(tx => ({
@@ -255,18 +176,19 @@ export class DataService {
 
     this.http.get<any[]>(`${this.apiUrl}/budgets`, { headers: this.getAuthHeaders() }).pipe(
       catchError((err) => {
-        this.toastService.showError('Failed to load budgets from backend. Using local backup.');
-        const userId = user.id || (user as any)._id;
-        return of(this.getData<Budget>('tp_budgets').filter(b => b.userId === userId));
+        this.toastService.showError(err?.error?.message || 'Failed to load budgets from server.');
+        return of([]);
       })
     ).subscribe(data => {
       const mapped: Budget[] = data.map(b => ({
         id: b._id || b.id,
-        userId: b.userId,
+        userId: b.userId ? String(b.userId) : (user?.id || (user as any)?._id || ''),
         category: b.category,
-        budget_amount: b.budget_amount !== undefined ? b.budget_amount : (b.limit || 0),
+        budget_amount: b.budget_amount !== undefined ? Number(b.budget_amount) : (Number(b.limit) || 0),
         month: b.month,
-        description: b.description
+        description: b.description,
+        spent: b.spent !== undefined ? Number(b.spent) : 0,
+        remaining: b.remaining !== undefined ? Number(b.remaining) : (Number(b.budget_amount) || 0)
       }));
       this.budgets.set(mapped);
     });
@@ -277,9 +199,9 @@ export class DataService {
     if (!user) return;
 
     this.http.get<Category[]>(`${this.apiUrl}/categories`, { headers: this.getAuthHeaders() }).pipe(
-      catchError((err) => {
-        this.toastService.showError('Failed to load categories from backend. Using local backup.');
-        return of(this.getData<Category>('tp_categories').filter(c => c.userId === user.id));
+      catchError(() => {
+        this.toastService.showError('Failed to load categories from server.');
+        return of([]);
       })
     ).subscribe(data => {
       const mapped = data.map(c => ({
@@ -295,10 +217,9 @@ export class DataService {
     if (!user) return;
 
     this.http.get<any>(`${this.apiUrl}/taxes/estimates`, { headers: this.getAuthHeaders() }).pipe(
-      catchError((err) => {
-        this.toastService.showError('Failed to load tax estimates from backend. Using local backup.');
-        const userId = user.id || (user as any)._id;
-        return of(this.getData<TaxEstimate>('tp_estimates').filter(e => e.userId === userId));
+      catchError(() => {
+        this.toastService.showError('Failed to load tax estimates from server.');
+        return of([]);
       })
     ).subscribe(res => {
       const list = res.estimates || res.data || res || [];
@@ -310,88 +231,62 @@ export class DataService {
     const user = this.currentUser();
     if (!user) return;
 
-    const newTx: Transaction = {
+    const payload = {
       ...tx,
-      id: 'tx_' + Date.now(),
       userId: user.id || (user as any)._id
     };
 
-    const allTx = this.getData<Transaction>('tp_transactions');
-    allTx.push(newTx);
-    this.saveData('tp_transactions', allTx);
-    this.transactions.update(items => [newTx, ...items]);
-
-    this.http.post<any>(`${this.apiUrl}/transactions`, newTx, { headers: this.getAuthHeaders() }).pipe(
-      catchError((err) => {
-        this.toastService.showError('Failed to sync new transaction to server.');
+    this.http.post<any>(`${this.apiUrl}/transactions`, payload, { headers: this.getAuthHeaders() }).pipe(
+      catchError(() => {
+        this.toastService.showError('Failed to add transaction to server.');
         return of(null);
       })
     ).subscribe(res => {
       if (res) {
-        const serverId = res._id || res.id;
-        // Update local signal state ID
-        this.transactions.update(items =>
-          items.map(t => t.id === newTx.id ? { ...t, id: serverId } : t)
-        );
-        // Update localStorage ID
-        const currentAll = this.getData<Transaction>('tp_transactions');
-        const idx = currentAll.findIndex(t => t.id === newTx.id);
-        if (idx !== -1) {
-          currentAll[idx].id = serverId;
-          this.saveData('tp_transactions', currentAll);
-        }
+        const created: Transaction = {
+          ...res,
+          id: res._id || res.id || ('tx_' + Date.now())
+        };
+        this.transactions.update(items => [created, ...items]);
+        this.toastService.showSuccess('Transaction added successfully.');
       }
     });
   }
 
   public deleteTransaction(id: string): void {
-    const allTx = this.getData<Transaction>('tp_transactions');
-    const filtered = allTx.filter(t => t.id !== id && (t as any)._id !== id);
-    this.saveData('tp_transactions', filtered);
-    this.transactions.update(items => items.filter(t => t.id !== id && (t as any)._id !== id));
-
     this.http.delete(`${this.apiUrl}/transactions/${id}`, { headers: this.getAuthHeaders() }).pipe(
-      catchError((err) => {
-        this.toastService.showError('Failed to sync transaction deletion to server.');
+      catchError(() => {
+        this.toastService.showError('Failed to delete transaction from server.');
         return of(null);
       })
-    ).subscribe();
+    ).subscribe(res => {
+      if (res !== null) {
+        this.transactions.update(items => items.filter(t => t.id !== id && (t as any)._id !== id));
+        this.toastService.showSuccess('Transaction deleted.');
+      }
+    });
   }
 
   public updateTransaction(id: string, changes: Omit<Transaction, 'id' | 'userId'>): void {
-    const allTx = this.getData<Transaction>('tp_transactions');
-    const index = allTx.findIndex(t => t.id === id);
-    if (index === -1) return;
-
-    const updatedTx: Transaction = { ...allTx[index], ...changes };
-    allTx[index] = updatedTx;
-    this.saveData('tp_transactions', allTx);
-    this.transactions.update(items => items.map(t => (t.id === id ? updatedTx : t)));
-
-    this.http.put<Transaction>(`${this.apiUrl}/transactions/${id}`, updatedTx, { headers: this.getAuthHeaders() }).pipe(
-      catchError((err) => {
-        this.toastService.showError('Failed to sync transaction update to server.');
+    this.http.put<Transaction>(`${this.apiUrl}/transactions/${id}`, changes, { headers: this.getAuthHeaders() }).pipe(
+      catchError(() => {
+        this.toastService.showError('Failed to update transaction on server.');
         return of(null);
       })
-    ).subscribe();
+    ).subscribe(res => {
+      if (res) {
+        const updated: Transaction = {
+          ...res,
+          id: res.id || (res as any)._id || id
+        };
+        this.transactions.update(items => items.map(t => (t.id === id || (t as any)._id === id ? updated : t)));
+        this.toastService.showSuccess('Transaction updated.');
+      }
+    });
   }
 
   public addBudget(budget: Omit<Budget, 'id' | 'userId'>): void {
     const user = this.currentUser();
-    if (!user) return;
-
-    const newBudget: Budget = {
-      ...budget,
-      id: 'bgt_' + Date.now(),
-      userId: user.id || (user as any)._id
-    };
-
-    const allBudgets = this.getData<Budget>('tp_budgets');
-    allBudgets.push(newBudget);
-    this.saveData('tp_budgets', allBudgets);
-
-    this.budgets.update(items => [...items, newBudget]);
-
     const backendPayload = {
       category: budget.category,
       budget_amount: budget.budget_amount,
@@ -400,54 +295,44 @@ export class DataService {
     };
 
     this.http.post<any>(`${this.apiUrl}/budgets`, backendPayload, { headers: this.getAuthHeaders() }).pipe(
-      catchError((err) => {
-        this.toastService.showError('Failed to sync new budget to server.');
+      catchError(() => {
+        this.toastService.showError('Failed to save budget to server.');
         return of(null);
       })
     ).subscribe(res => {
       if (res) {
-        const serverId = res._id || res.id;
-        this.budgets.update(items =>
-          items.map(b => b.id === newBudget.id ? { ...b, id: serverId } : b)
-        );
-        const currentAll = this.getData<Budget>('tp_budgets');
-        const idx = currentAll.findIndex(b => b.id === newBudget.id);
-        if (idx !== -1) {
-          currentAll[idx].id = serverId;
-          this.saveData('tp_budgets', currentAll);
-        }
+        const created: Budget = {
+          id: res._id || res.id,
+          userId: res.userId ? String(res.userId) : (user?.id || (user as any)?._id || ''),
+          category: res.category,
+          budget_amount: res.budget_amount !== undefined ? Number(res.budget_amount) : (Number(res.limit) || 0),
+          month: res.month,
+          description: res.description,
+          spent: res.spent !== undefined ? Number(res.spent) : 0,
+          remaining: res.remaining !== undefined ? Number(res.remaining) : (Number(res.budget_amount) || 0)
+        };
+        this.budgets.update(items => [...items, created]);
+        this.toastService.showSuccess('Budget added successfully.');
       }
     });
   }
 
   public deleteBudget(id: string): void {
-    const allBudgets = this.getData<Budget>('tp_budgets');
-    const filtered = allBudgets.filter(b => b.id !== id && b._id !== id);
-    this.saveData('tp_budgets', filtered);
-
-    this.budgets.update(items => items.filter(b => b.id !== id && b._id !== id));
-
     this.http.delete(`${this.apiUrl}/budgets/${id}`, { headers: this.getAuthHeaders() }).pipe(
-      catchError((err) => {
-        this.toastService.showError('Failed to sync budget deletion to server.');
+      catchError(() => {
+        this.toastService.showError('Failed to delete budget from server.');
         return of(null);
       })
-    ).subscribe();
+    ).subscribe(res => {
+      if (res !== null) {
+        this.budgets.update(items => items.filter(b => b.id !== id && b._id !== id));
+        this.toastService.showSuccess('Budget deleted.');
+      }
+    });
   }
 
   public updateBudget(id: string, changes: Omit<Budget, 'id' | 'userId'>): void {
-    const allBudgets = this.getData<Budget>('tp_budgets');
-    const index = allBudgets.findIndex(b => b.id === id || b._id === id);
-    if (index === -1) return;
-
-    const oldBudget = allBudgets[index];
-    const spent = oldBudget.spent || 0;
-    const remaining = (changes.budget_amount !== undefined ? changes.budget_amount : (oldBudget.budget_amount || 0)) - spent;
-    const updatedBudget: Budget = { ...oldBudget, ...changes, spent, remaining };
-    allBudgets[index] = updatedBudget;
-    this.saveData('tp_budgets', allBudgets);
-    this.budgets.update(items => items.map(b => (b.id === id || b._id === id ? updatedBudget : b)));
-
+    const user = this.currentUser();
     const backendPayload = {
       category: changes.category,
       budget_amount: changes.budget_amount,
@@ -456,15 +341,29 @@ export class DataService {
     };
 
     this.http.put<any>(`${this.apiUrl}/budgets/${id}`, backendPayload, { headers: this.getAuthHeaders() }).pipe(
-      catchError((err) => {
-        this.toastService.showError('Failed to sync budget update to server.');
+      catchError(() => {
+        this.toastService.showError('Failed to update budget on server.');
         return of(null);
       })
-    ).subscribe();
+    ).subscribe(res => {
+      if (res) {
+        const updated: Budget = {
+          id: res._id || res.id || id,
+          userId: res.userId ? String(res.userId) : (user?.id || (user as any)?._id || ''),
+          category: res.category,
+          budget_amount: res.budget_amount !== undefined ? Number(res.budget_amount) : (Number(res.limit) || 0),
+          month: res.month,
+          description: res.description,
+          spent: res.spent !== undefined ? Number(res.spent) : 0,
+          remaining: res.remaining !== undefined ? Number(res.remaining) : 0
+        };
+        this.budgets.update(items => items.map(b => (b.id === id || b._id === id ? updated : b)));
+        this.toastService.showSuccess('Budget updated.');
+      }
+    });
   }
 
   public renameCategoryCascade(oldName: string, newName: string, type: 'income' | 'expense'): void {
-    // 1. Cascade rename in transactions
     const txsToUpdate = this.transactions().filter(t => t.category === oldName && t.type === type);
     txsToUpdate.forEach(t => {
       this.updateTransaction(t.id, {
@@ -477,7 +376,6 @@ export class DataService {
       });
     });
 
-    // 2. Cascade rename in budgets (expenses only)
     if (type === 'expense') {
       const budgetsToUpdate = this.budgets().filter(b => b.category === oldName);
       budgetsToUpdate.forEach(b => {
@@ -495,138 +393,34 @@ export class DataService {
   }
 
   public addCategory(cat: Omit<Category, 'id' | 'userId'>): void {
-    const user = this.currentUser();
-    if (!user) return;
-
-    const newCat: Category = {
-      ...cat,
-      id: 'cat_' + Date.now(),
-      userId: user.id || (user as any)._id
-    };
-
-    const allCats = this.getData<Category>('tp_categories');
-    allCats.push(newCat);
-    this.saveData('tp_categories', allCats);
-
-    this.categories.update(items => [...items, newCat]);
-
     this.http.post<any>(`${this.apiUrl}/categories`, cat, { headers: this.getAuthHeaders() }).pipe(
-      catchError((err) => {
-        this.toastService.showError('Failed to sync new category to server.');
+      catchError(() => {
+        this.toastService.showError('Failed to save category to server.');
         return of(null);
       })
     ).subscribe(res => {
       if (res) {
-        const serverId = res._id || res.id;
-        this.categories.update(items =>
-          items.map(c => c.id === newCat.id ? { ...c, id: serverId, _id: serverId } : c)
-        );
-        const currentAll = this.getData<Category>('tp_categories');
-        const idx = currentAll.findIndex(c => c.id === newCat.id);
-        if (idx !== -1) {
-          currentAll[idx].id = serverId;
-          currentAll[idx]._id = serverId;
-          this.saveData('tp_categories', currentAll);
-        }
+        const created: Category = {
+          ...res,
+          id: res._id || res.id
+        };
+        this.categories.update(items => [...items, created]);
+        this.toastService.showSuccess('Category added successfully.');
       }
     });
   }
 
   public deleteCategory(id: string): void {
-    const allCats = this.getData<Category>('tp_categories');
-    const filtered = allCats.filter(c => c.id !== id && (c as any)._id !== id);
-    this.saveData('tp_categories', filtered);
-
-    this.categories.update(items => items.filter(c => c.id !== id && (c as any)._id !== id));
-
     this.http.delete(`${this.apiUrl}/categories/${id}`, { headers: this.getAuthHeaders() }).pipe(
-      catchError((err) => {
-        this.toastService.showError('Failed to sync category deletion to server.');
+      catchError(() => {
+        this.toastService.showError('Failed to delete category from server.');
         return of(null);
       })
-    ).subscribe();
-  }
-
-  private seedDefaultCategories(userId: string): void {
-    const defaults: Omit<Category, 'id' | 'userId'>[] = [
-      { type: 'expense', name: 'Office Rent', color: '#3b82f6' },
-      { type: 'expense', name: 'Business Expenses', color: '#10b981' },
-      { type: 'expense', name: 'Utilities', color: '#f59e0b' },
-      { type: 'expense', name: 'Food', color: '#ef4444' },
-      { type: 'expense', name: 'Software Subscriptions', color: '#8b5cf6' },
-      { type: 'expense', name: 'Professional Development', color: '#ec4899' },
-      { type: 'expense', name: 'Marketing', color: '#06b6d4' },
-      { type: 'expense', name: 'Travel', color: '#f97316' },
-      { type: 'expense', name: 'Meals & Entertainment', color: '#6366f1' },
-      { type: 'expense', name: 'Other', color: '#64748b' },
-      { type: 'income', name: 'Consulting', color: '#10b981' },
-      { type: 'income', name: 'Design Project', color: '#3b82f6' },
-      { type: 'income', name: 'SaaS Subscriptions', color: '#8b5cf6' },
-      { type: 'income', name: 'Ad Revenue', color: '#f59e0b' },
-      { type: 'income', name: 'Other', color: '#64748b' }
-    ];
-
-    const allCats = this.getData<Category>('tp_categories');
-    defaults.forEach(c => {
-      allCats.push({
-        ...c,
-        id: 'cat_' + Math.random().toString(36).substring(2, 9),
-        userId
-      });
+    ).subscribe(res => {
+      if (res !== null) {
+        this.categories.update(items => items.filter(c => c.id !== id && (c as any)._id !== id));
+        this.toastService.showSuccess('Category deleted.');
+      }
     });
-    this.saveData('tp_categories', allCats);
-  }
-
-  private seedDefaultTransactions(userId: string): void {
-    const today = new Date();
-    const formatDateStr = (daysAgo: number) => {
-      const d = new Date(today);
-      d.setDate(today.getDate() - daysAgo);
-      return d.toISOString().split('T')[0];
-    };
-
-    const defaults: Omit<Transaction, 'id' | 'userId'>[] = [
-      { type: 'income', description: 'Web Design Project - Payout', category: 'Design Project', amount: 120000.00, date: formatDateStr(3), notes: 'Milestone 2 payout from foreign client' },
-      { type: 'income', description: 'Consulting Session - Architecture Review', category: 'Consulting', amount: 45000.00, date: formatDateStr(7), notes: 'Reviewed Bangalore startup backend scaling' },
-      { type: 'income', description: 'Ad Revenue Payout', category: 'Ad Revenue', amount: 28000.00, date: formatDateStr(14) },
-      { type: 'expense', description: 'Office Hotdesk Rental - Mumbai', category: 'Office Rent', amount: 22000.00, date: formatDateStr(1) },
-      { type: 'expense', description: 'AWS Hosting - Asia Pacific (Mumbai) Node', category: 'Business Expenses', amount: 14500.00, date: formatDateStr(2), notes: 'Server nodes hosting' },
-      { type: 'expense', description: 'Internet & Lease Line Utilities', category: 'Utilities', amount: 3500.00, date: formatDateStr(5) },
-      { type: 'expense', description: 'Client Lunch - Colaba Cafe', category: 'Meals & Entertainment', amount: 6200.00, date: formatDateStr(6) },
-      { type: 'expense', description: 'GitHub & Slack Pro Subscriptions', category: 'Software Subscriptions', amount: 4200.00, date: formatDateStr(8) },
-      { type: 'expense', description: 'Travel Expense - Ola Outstation Trip', category: 'Travel', amount: 3800.00, date: formatDateStr(10) }
-    ];
-
-    const allTx = this.getData<Transaction>('tp_transactions');
-    defaults.forEach((t, i) => {
-      allTx.push({
-        ...t,
-        id: 'tx_' + i + '_' + Math.random().toString(36).substring(2, 5),
-        userId
-      });
-    });
-    this.saveData('tp_transactions', allTx);
-  }
-
-  private seedDefaultBudgets(userId: string): void {
-    const currentMonth = new Date().toISOString().slice(0, 7);
-
-    const defaults: Omit<Budget, 'id' | 'userId'>[] = [
-      { category: 'Office Rent', budget_amount: 25000.00, month: currentMonth, description: 'Mumbai hotdesk' },
-      { category: 'Business Expenses', budget_amount: 20000.00, month: currentMonth, description: 'Server and advertising allotments' },
-      { category: 'Software Subscriptions', budget_amount: 8000.00, month: currentMonth },
-      { category: 'Utilities', budget_amount: 5000.00, month: currentMonth },
-      { category: 'Meals & Entertainment', budget_amount: 10000.00, month: currentMonth }
-    ];
-
-    const allBudgets = this.getData<Budget>('tp_budgets');
-    defaults.forEach(b => {
-      allBudgets.push({
-        ...b,
-        id: 'bgt_' + Math.random().toString(36).substring(2, 9),
-        userId
-      });
-    });
-    this.saveData('tp_budgets', allBudgets);
   }
 }

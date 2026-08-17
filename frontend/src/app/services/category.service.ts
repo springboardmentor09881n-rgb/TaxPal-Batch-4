@@ -39,26 +39,20 @@ export class CategoryService {
   readonly categories = this.dataService.categories;
 
   private getAuthOptions() {
-    const token = localStorage.getItem('tp_token') || sessionStorage.getItem('tp_token');
+    const token = sessionStorage.getItem('tp_token');
     return token ? { headers: { Authorization: `Bearer ${token}` } } : {};
   }
 
   loadCategories(): void {
     this.http.get<Category[]>(`${environment.apiUrl}/categories`, this.getAuthOptions()).pipe(
       catchError((err) => {
-        this.toastService.showError('Failed to load categories from backend. Using local backup.');
-        const userId = this.dataService.currentUser()?.id;
-        if (userId) {
-          const local = JSON.parse(localStorage.getItem('tp_categories') || '[]');
-          this.dataService.categories.set(local.filter((c: any) => c.userId === userId));
-        }
+        this.toastService.showError('Failed to load categories from server.');
         return of([]);
       })
     ).subscribe({
       next: (res) => {
-        if (res && res.length > 0) {
+        if (res && Array.isArray(res)) {
           this.dataService.categories.set(res);
-          localStorage.setItem('tp_categories', JSON.stringify(res));
         }
       }
     });
@@ -98,10 +92,6 @@ export class CategoryService {
       tap((newCat) => {
         const current = this.dataService.categories();
         this.dataService.categories.set([...current, newCat]);
-
-        // Sync localStorage
-        const local = JSON.parse(localStorage.getItem('tp_categories') || '[]');
-        localStorage.setItem('tp_categories', JSON.stringify([...local, newCat]));
       }),
       catchError((err) => {
         this.toastService.showError('Failed to save category on server.');
@@ -115,11 +105,6 @@ export class CategoryService {
       tap((updatedCat) => {
         const current = this.dataService.categories().map(c => c._id === id || c.id === id ? { ...c, ...updatedCat } : c);
         this.dataService.categories.set(current);
-
-        // Sync localStorage
-        const local = JSON.parse(localStorage.getItem('tp_categories') || '[]');
-        const updatedLocal = local.map((c: any) => (c._id === id || c.id === id) ? { ...c, ...updatedCat } : c);
-        localStorage.setItem('tp_categories', JSON.stringify(updatedLocal));
       }),
       catchError((err) => {
         this.toastService.showError('Failed to update category on server.');
@@ -132,10 +117,6 @@ export class CategoryService {
     return this.http.delete<any>(`${environment.apiUrl}/categories/${id}`, this.getAuthOptions()).pipe(
       tap(() => {
         this.dataService.categories.set(this.dataService.categories().filter((item: Category) => item._id !== id && item.id !== id));
-
-        // Sync localStorage
-        const local = JSON.parse(localStorage.getItem('tp_categories') || '[]');
-        localStorage.setItem('tp_categories', JSON.stringify(local.filter((item: any) => item._id !== id && item.id !== id)));
       }),
       catchError((err) => {
         this.toastService.showError('Failed to delete category on server.');
@@ -153,7 +134,6 @@ export class CategoryService {
 
     const categoryNames = availableCategories.map(c => c.name);
 
-    // Rule dictionary mapping keywords to potential category names
     const rules: { keywords: string[]; category: string }[] = type === 'expense' ? [
       { keywords: ['rent', 'pg', 'flat', 'lease', 'hotdesk', 'office rent'], category: 'Office Rent' },
       { keywords: ['housing', 'apartment', 'mortgage'], category: 'Housing' },
@@ -175,7 +155,6 @@ export class CategoryService {
       { keywords: ['salary', 'stipend', 'payroll', 'wages', 'bonus'], category: 'Consulting' }
     ];
 
-    // Try matching rules
     for (const rule of rules) {
       if (rule.keywords.some(kw => text.includes(kw))) {
         const match = categoryNames.find(c => c.toLowerCase() === rule.category.toLowerCase());
@@ -183,7 +162,6 @@ export class CategoryService {
       }
     }
 
-    // Fallback
     for (const catName of categoryNames) {
       if (catName.toLowerCase() !== 'other' && text.includes(catName.toLowerCase())) {
         return catName;

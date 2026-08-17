@@ -70,7 +70,7 @@ export class TaxEstimateService {
     const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
     const activeNotifications: TaxReminder[] = [];
-    const dismissed = JSON.parse(localStorage.getItem('tp_dismissed_notifications') || '[]');
+    const dismissed = JSON.parse(sessionStorage.getItem('tp_dismissed_notifications') || '[]');
 
     for (const entry of entries) {
       const entryMidnight = new Date(entry.dueDate.getFullYear(), entry.dueDate.getMonth(), entry.dueDate.getDate());
@@ -95,28 +95,23 @@ export class TaxEstimateService {
   }
 
   public dismissNotification(id: string): void {
-    const dismissed = JSON.parse(localStorage.getItem('tp_dismissed_notifications') || '[]');
+    const dismissed = JSON.parse(sessionStorage.getItem('tp_dismissed_notifications') || '[]');
     if (!dismissed.includes(id)) {
       dismissed.push(id);
-      localStorage.setItem('tp_dismissed_notifications', JSON.stringify(dismissed));
+      sessionStorage.setItem('tp_dismissed_notifications', JSON.stringify(dismissed));
     }
     this.notifications.update(list => list.filter(n => n.id !== id));
   }
 
   private getAuthOptions() {
-    const token = localStorage.getItem('tp_token') || sessionStorage.getItem('tp_token');
+    const token = sessionStorage.getItem('tp_token');
     return token ? { headers: { Authorization: `Bearer ${token}` } } : {};
   }
 
   loadEstimates(): void {
     this.http.get<any>(`${environment.apiUrl}/taxes/estimates`, this.getAuthOptions()).pipe(
-      catchError((err: unknown) => {
-        this.toastService.showError('Failed to load tax estimates from backend. Using local backup.');
-        const userId = this.dataService.currentUser()?.id;
-        if (userId) {
-          const local = JSON.parse(localStorage.getItem('tp_estimates') || '[]');
-          this.dataService.estimates.set(local.filter((e: any) => e.userId === userId));
-        }
+      catchError(() => {
+        this.toastService.showError('Failed to load tax estimates from backend.');
         return of({ estimates: [] });
       })
     ).subscribe({
@@ -124,7 +119,6 @@ export class TaxEstimateService {
         const data = res.estimates || res.data || res || [];
         const finalData = Array.isArray(data) ? data : [];
         this.dataService.estimates.set(finalData);
-        localStorage.setItem('tp_estimates', JSON.stringify(finalData));
       }
     });
   }
@@ -142,17 +136,6 @@ export class TaxEstimateService {
           }
           return [saved, ...current];
         });
-
-        // Sync local storage
-        const local = JSON.parse(localStorage.getItem('tp_estimates') || '[]');
-        const idx = local.findIndex((e: any) => e._id === saved._id || (e.quarter === saved.quarter && e.dueDate === saved.dueDate));
-        if (idx >= 0) {
-          local[idx] = saved;
-        } else {
-          local.unshift(saved);
-        }
-        localStorage.setItem('tp_estimates', JSON.stringify(local));
-
         this.loadCalendar();
       }),
       catchError((err: any) => {
@@ -164,7 +147,7 @@ export class TaxEstimateService {
 
   loadCalendar(): void {
     this.http.get<any>(`${environment.apiUrl}/taxes/calendar`, this.getAuthOptions()).pipe(
-      catchError((err: unknown) => {
+      catchError(() => {
         this.toastService.showError('Failed to load tax calendar events.');
         return of([]);
       })
@@ -180,10 +163,6 @@ export class TaxEstimateService {
     return this.http.delete<any>(`${environment.apiUrl}/taxes/estimates/${id}`, this.getAuthOptions()).pipe(
       tap(() => {
         this.dataService.estimates.update(current => current.filter((item: TaxEstimate) => item._id !== id));
-
-        // Sync local storage
-        const local = JSON.parse(localStorage.getItem('tp_estimates') || '[]');
-        localStorage.setItem('tp_estimates', JSON.stringify(local.filter((item: any) => item._id !== id)));
       }),
       catchError((err: any) => {
         this.toastService.showError('Failed to delete tax estimate on server.');

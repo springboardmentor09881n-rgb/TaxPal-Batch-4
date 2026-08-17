@@ -23,18 +23,12 @@ export class BudgetService {
   loadBudgets(): void {
     this.http.get<Budget[]>(`${environment.apiUrl}/budgets`, this.getAuthOptions()).pipe(
       catchError((err) => {
-        this.toastService.showError('Failed to load budgets from backend. Using local backup.');
-        const userId = this.dataService.currentUser()?.id;
-        if (userId) {
-          const local = JSON.parse(localStorage.getItem('tp_budgets') || '[]');
-          this.dataService.budgets.set(local.filter((b: any) => b.userId === userId));
-        }
+        this.toastService.showError('Failed to load budgets from server.');
         return of([]);
       })
     ).subscribe((res) => {
-      if (res && res.length > 0) {
+      if (res && Array.isArray(res)) {
         this.dataService.budgets.set(res);
-        localStorage.setItem('tp_budgets', JSON.stringify(res));
       }
     });
   }
@@ -47,10 +41,6 @@ export class BudgetService {
         const remaining = newBudget.remaining !== undefined ? newBudget.remaining : ((newBudget.budget_amount || 0) - spent);
         const formatted = { ...newBudget, spent, remaining };
         this.dataService.budgets.set([formatted, ...current]);
-
-        // Sync localStorage
-        const local = JSON.parse(localStorage.getItem('tp_budgets') || '[]');
-        localStorage.setItem('tp_budgets', JSON.stringify([formatted, ...local]));
       }),
       catchError((err) => {
         this.toastService.showError('Failed to save budget on server.');
@@ -74,11 +64,6 @@ export class BudgetService {
           return b;
         });
         this.dataService.budgets.set(current);
-
-        // Sync localStorage
-        const local = JSON.parse(localStorage.getItem('tp_budgets') || '[]');
-        const updatedLocal = local.map((b: any) => (b._id === id || b.id === id) ? { ...b, ...updatedBudget } : b);
-        localStorage.setItem('tp_budgets', JSON.stringify(updatedLocal));
       }),
       catchError((err) => {
         this.toastService.showError('Failed to update budget on server.');
@@ -91,10 +76,6 @@ export class BudgetService {
     return this.http.delete<any>(`${environment.apiUrl}/budgets/${id}`, this.getAuthOptions()).pipe(
       tap(() => {
         this.dataService.budgets.set(this.dataService.budgets().filter((item: Budget) => item._id !== id && item.id !== id));
-
-        // Sync localStorage
-        const local = JSON.parse(localStorage.getItem('tp_budgets') || '[]');
-        localStorage.setItem('tp_budgets', JSON.stringify(local.filter((item: any) => item._id !== id && item.id !== id)));
       }),
       catchError((err) => {
         this.toastService.showError('Failed to delete budget on server.');

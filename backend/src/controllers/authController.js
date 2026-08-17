@@ -1,4 +1,5 @@
 const User = require('../models/User.model');
+const Category = require('../models/categories.model');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
@@ -75,6 +76,21 @@ exports.registerUser = async (req, res) => {
       country,
       incomeBracket,
     });
+
+    // Seed default categories for the new user (No demo transactions or budgets)
+    const defaultCategories = [
+      { userId: user._id, name: 'Salary', type: 'income', color: '#10b981' },
+      { userId: user._id, name: 'Freelance', type: 'income', color: '#3b82f6' },
+      { userId: user._id, name: 'Investments', type: 'income', color: '#8b5cf6' },
+      { userId: user._id, name: 'Housing', type: 'expense', color: '#ef4444' },
+      { userId: user._id, name: 'Food', type: 'expense', color: '#f59e0b' },
+      { userId: user._id, name: 'Transportation', type: 'expense', color: '#06b6d4' },
+      { userId: user._id, name: 'Utilities', type: 'expense', color: '#6366f1' },
+      { userId: user._id, name: 'Entertainment', type: 'expense', color: '#ec4899' },
+      { userId: user._id, name: 'Healthcare', type: 'expense', color: '#14b8a6' },
+      { userId: user._id, name: 'Business Expenses', type: 'expense', color: '#64748b' }
+    ];
+    await Category.insertMany(defaultCategories);
 
     // Send welcome email (non-blocking)
     sendEmail({
