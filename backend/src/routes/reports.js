@@ -18,4 +18,9 @@ router.post('/generate', auth, reportController.generateReport);
 // @access  Private
 router.get('/download/:id', auth, reportController.downloadReport);
 
+// @route   DELETE api/reports/:id
+// @desc    Delete a report
+// @access  Private
+router.delete('/:id', auth, reportController.deleteReport);
+
 module.exports = router;

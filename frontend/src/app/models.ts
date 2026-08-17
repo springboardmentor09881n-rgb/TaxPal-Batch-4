@@ -32,6 +32,7 @@ export interface Budget {
 }
 
 export interface Report {
+  _id?: string;
   id: string;
   userId: string;
   reportType: string;
@@ -39,6 +40,8 @@ export interface Report {
   format: 'PDF' | 'CSV';
   generatedDate: string;
   name: string;
+  filePath?: string;
+  data?: any;
 }
 
 export interface Category {

@@ -1159,8 +1159,13 @@ export class ReportsComponent {
   }
 
   onSubmit(): void {
-    const report = this.reportService.generateReport(this.reportType(), this.period(), this.format());
-    this.selectedReport.set(report);
+    this.reportService.generateReport(this.reportType(), this.period(), this.format()).subscribe({
+      next: (report) => {
+        if (report) {
+          this.selectedReport.set(report);
+        }
+      }
+    });
   }
 
   onReset(): void {
@@ -1174,18 +1179,15 @@ export class ReportsComponent {
   }
 
   onDownload(report: GeneratedReport): void {
-    if (report.format === 'CSV') {
-      this.reportService.downloadReportCSV(report);
-    } else {
-      this.reportService.downloadReportPDF(report);
-    }
+    this.reportService.downloadReport(report);
   }
 
   onDelete(report: GeneratedReport, event: MouseEvent): void {
     event.stopPropagation();
     if (confirm(`Are you sure you want to delete "${report.name}"?`)) {
-      this.reportService.deleteReport(report.id);
-      if (this.selectedReport()?.id === report.id) {
+      const targetId = report._id || report.id;
+      this.reportService.deleteReport(targetId);
+      if (this.selectedReport()?.id === report.id || this.selectedReport()?.id === targetId) {
         this.selectedReport.set(null);
       }
     }
@@ -1198,10 +1200,22 @@ export class ReportsComponent {
   /** Builds the sheet-style view model from the real report shape. */
   sheet(r: GeneratedReport): SheetViewModel {
     const user = this.dataService.currentUser();
-    const net = r.data.net;
-    const totalDeductions = r.data.estimatedTax ? r.data.estimatedTax * 0.6 : r.data.totalExpenses * 0.15;
+    const data = r.data || { totalIncome: 0, totalExpenses: 0, net: 0, incomeBreakdown: [], expenseBreakdown: [], transactions: [] };
+    const net = data.net || 0;
+    const allEstimates = this.dataService.estimates();
+    const matchedEst = allEstimates.find(e => (e.quarter || '').toLowerCase() === (r.period || '').toLowerCase() || r.periodLabel.includes(e.quarter || ''));
 
-    const budgetRows = r.data.budgetComparison ?? [];
+    const businessExp = matchedEst ? (matchedEst.businessExpenses || 0) : (data.totalExpenses || 0);
+    const retirement = matchedEst ? (matchedEst.retirementContributions || 0) : 0;
+    const healthIns = matchedEst ? (matchedEst.healthInsurancePremiums || 0) : 0;
+    const homeOff = matchedEst ? (matchedEst.homeOfficeDeductions || 0) : 0;
+    const totalDeductions = businessExp + retirement + healthIns + homeOff;
+
+    const estTax = data.estimatedTax ?? (matchedEst ? matchedEst.estimatedTax : Math.max(0, net) * 0.25);
+    const fedTax = estTax * 0.7;
+    const stateTax = estTax * 0.3;
+
+    const budgetRows = data.budgetComparison ?? [];
     const totalLimit = budgetRows.reduce((s, b) => s + b.budgeted, 0);
     const totalActualSpent = budgetRows.reduce((s, b) => s + b.spent, 0);
 
@@ -1209,34 +1223,34 @@ export class ReportsComponent {
       header: {
         title: REPORT_TYPE_LABEL[r.type],
         periodLabel: r.periodLabel,
-        userName: user?.name || 'N/A',
+        userName: user?.name || user?.username || 'N/A',
         userEmail: user?.email || 'N/A',
         generatedDate: r.generatedDate
       },
       metrics: {
-        totalIncome: r.data.totalIncome,
-        totalExpenses: r.data.totalExpenses,
+        totalIncome: data.totalIncome || 0,
+        totalExpenses: data.totalExpenses || 0,
         netIncome: net,
-        grossIncome: r.data.totalIncome,
+        grossIncome: data.totalIncome || 0,
         totalDeductions,
-        taxableIncome: Math.max(0, r.data.totalIncome - totalDeductions),
-        estimatedTax: r.data.estimatedTax ?? Math.max(0, net) * 0.25,
+        taxableIncome: Math.max(0, (data.totalIncome || 0) - totalDeductions),
+        estimatedTax: estTax,
         totalLimit,
         totalActualSpent,
         remainingBalance: totalLimit - totalActualSpent,
         overBudget: totalActualSpent > totalLimit
       },
       deductionsBreakdown: {
-        businessExpenses: totalDeductions * 0.4,
-        retirement: totalDeductions * 0.25,
-        healthInsurance: totalDeductions * 0.2,
-        homeOffice: totalDeductions * 0.15
+        businessExpenses: businessExp,
+        retirement: retirement,
+        healthInsurance: healthIns,
+        homeOffice: homeOff
       },
       taxCalculations: {
-        nationalTax: (r.data.estimatedTax ?? 0) * 0.7,
-        stateTax: (r.data.estimatedTax ?? 0) * 0.3,
-        effectiveTaxRate: r.data.totalIncome > 0 ? ((r.data.estimatedTax ?? 0) / r.data.totalIncome) * 100 : 0,
-        dueDate: 'See Tax Estimator'
+        nationalTax: fedTax,
+        stateTax: stateTax,
+        effectiveTaxRate: (data.totalIncome || 0) > 0 ? (estTax / data.totalIncome) * 100 : 0,
+        dueDate: matchedEst?.dueDate ? new Date(matchedEst.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Quarterly Due Date'
       },
       categoryPerformance: budgetRows.map(b => ({
         categoryName: b.category,

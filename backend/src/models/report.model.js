@@ -9,13 +9,11 @@ const reportSchema = new mongoose.Schema({
   reportType: {
     type: String,
     required: true,
-    enum: ['Income Statement', 'Expense Report', 'Tax Summary'],
+    enum: ['Income Statement', 'Tax Summary', 'Budget Performance'],
   },
   period: {
     type: String,
     required: true,
-    // No enum restriction — supports both preset labels (e.g. 'Current Month')
-    // and custom period strings (e.g. 'Jan 2025', 'Q2 2024')
   },
   format: {
     type: String,
@@ -41,6 +39,10 @@ const reportSchema = new mongoose.Schema({
   filePath: {
     type: String,
     default: null,
+  },
+  data: {
+    type: Object,
+    default: {},
   }
 }, {
   timestamps: true

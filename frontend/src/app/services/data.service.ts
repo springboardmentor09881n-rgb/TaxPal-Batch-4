@@ -11,7 +11,6 @@ export class DataService {
   public readonly currentUser = signal<User | null>(null);
   public readonly transactions = signal<Transaction[]>([]);
   public readonly budgets = signal<Budget[]>([]);
-  public readonly reports = signal<Report[]>([]);
   public readonly categories = signal<Category[]>([]);
   public readonly estimates = signal<TaxEstimate[]>([]);
 
@@ -59,9 +58,6 @@ export class DataService {
 
     const allBudgets = this.getData<Budget>('tp_budgets');
     this.budgets.set(allBudgets.filter(b => b.userId === userId));
-
-    const allReports = this.getData<Report>('tp_reports');
-    this.reports.set(allReports.filter(r => r.userId === userId));
 
     const allCategories = this.getData<Category>('tp_categories');
     this.categories.set(allCategories.filter(c => c.userId === userId));
@@ -231,7 +227,6 @@ export class DataService {
     this.currentUser.set(null);
     this.transactions.set([]);
     this.budgets.set([]);
-    this.reports.set([]);
     this.categories.set([]);
   }
 
