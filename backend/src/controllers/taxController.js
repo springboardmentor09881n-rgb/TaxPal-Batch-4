@@ -245,6 +245,7 @@ exports.calculateTaxEstimate = async (req, res) => {
 
         // Determine Due Date based on Quarter and Tax Year
         const taxYear = requestYear ? Number(requestYear) : new Date().getFullYear();
+        let dueDate;
         switch (quarter) {
             case 'Q1':
                 dueDate = new Date(taxYear, 3, 15); // April 15 of taxYear

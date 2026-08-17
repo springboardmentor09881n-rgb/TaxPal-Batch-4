@@ -1,10 +1,6 @@
 import { Component, signal, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-<<<<<<< HEAD
 import { ActivatedRoute } from '@angular/router';
-=======
-import { TaxNotificationPanel, NotificationPriority } from '../tax-notification-panel/tax-notification-panel';
->>>>>>> Navya-Sri
 import { TaxEstimateService } from '../../services/tax-estimate.service';
 import { DataService } from '../../services/data.service';
 import { TaxEstimate, TaxEstimateFilingStatus } from '../../models';
@@ -39,16 +35,6 @@ interface CalendarEntry {
   description: string;
 }
 
-<<<<<<< HEAD
-
-=======
-interface TaxReminder {
-  id: string;
-  message: string;
-  dueDate: string;
-  priority?: NotificationPriority;
-}
->>>>>>> Navya-Sri
 
 const US_STATES: StateOption[] = [
   { name: 'Alabama', rate: 0.05 }, { name: 'Alaska', rate: 0 }, { name: 'Arizona', rate: 0.025 },
@@ -297,11 +283,7 @@ function computeProgressiveTax(annualIncome: number, brackets: Bracket[]): numbe
 @Component({
   selector: 'app-tax-estimator',
   standalone: true,
-<<<<<<< HEAD
   imports: [FormsModule, CurrencyFormatterDirective],
-=======
-  imports: [FormsModule, TaxNotificationPanel, CurrencyFormatterDirective],
->>>>>>> Navya-Sri
   template: `
     <div class="space-y-2">
       @if (showCalcToast()) {
@@ -325,30 +307,8 @@ function computeProgressiveTax(annualIncome: number, brackets: Bracket[]): numbe
         <p class="text-xs text-slate-500 mt-1">Calculate your estimated tax obligations</p>
       </div>
 
-<<<<<<< HEAD
       <!-- Notifications floating overlay removed (now handled globally in DashboardLayoutComponent) -->
-=======
-      @if (notifications().length > 0) {
-        <!-- Floating overlay: sits above the form/page content instead of pushing layout down.
-             Adjust notificationZIndex (below in the component class) to raise or lower it
-             relative to other overlays such as the "calculated" toast. -->
-        <div
-          class="fixed top-20 right-4 sm:right-6 flex flex-col gap-3 w-[calc(100%-2rem)] max-w-sm max-h-[75vh] overflow-y-auto pr-1"
-          [style.z-index]="notificationZIndex"
-        >
-          @for (n of notifications(); track n.id) {
-            <app-tax-notification-panel
-              [message]="n.message"
-              [dueDate]="n.dueDate"
-              [priority]="n.priority || 'Medium'"
-              (viewCalendar)="view.set('calendar')"
-              (markAsDone)="dismissNotification(n.id)"
-              (dismiss)="dismissNotification(n.id)"
-            ></app-tax-notification-panel>
-          }
-        </div>
-      }
->>>>>>> Navya-Sri
+
 
       <!-- View toggle -->
       <div class="inline-flex items-center gap-1 bg-slate-100 rounded-xl p-1 mb-6">
@@ -735,8 +695,6 @@ export class TaxEstimatorPage {
 
   protected editingEstimateId: string | null = null;
 
-  protected editingEstimateId: string | null = null;
-
   protected grossIncome: number | null = null;
   protected businessExpenses: number | null = null;
   protected retirementContributions: number | null = null;
@@ -769,53 +727,6 @@ export class TaxEstimatorPage {
     ];
   }
 
-<<<<<<< HEAD
-  protected requiresFilingStatus(): boolean {
-    return this.country === 'United States';
-=======
-  protected createReminder(entry: CalendarEntry): void {
-    if (!this.notificationsEnabled()) return;
-    const days = this.daysUntil(entry.dueDate);
-    const priority: NotificationPriority = (days > 0 && days <= 7) ? 'High' : (days > 7 && days <= 40 ? 'Medium' : 'Low');
-    const id = `${this.country}-${entry.quarter}-${entry.dueDate.getTime()}`;
-    const reminder: TaxReminder = {
-      id,
-      message: `Your ${entry.quarter} tax filing is due in ${days} day${days === 1 ? '' : 's'}.`,
-      dueDate: entry.dueDate.toLocaleDateString(this.locale(), { month: 'short', day: 'numeric', year: 'numeric' }),
-      priority
-    };
-    this.notifications.update((list: TaxReminder[]) => {
-      const idx = list.findIndex(n => n.id === id);
-      if (idx >= 0) {
-        const updated = [...list];
-        updated[idx] = reminder;
-        return updated;
-      }
-      return [...list, reminder];
-    });
-  }
-
-  protected toggleReminder(entry: CalendarEntry): void {
-    if (this.isPast(entry)) return;
-    if (this.hasReminder(entry)) {
-      const id = `${this.country}-${entry.quarter}-${entry.dueDate.getTime()}`;
-      this.dismissNotification(id);
-    } else {
-      this.createReminder(entry);
-    }
-  }
-
-  protected toggleNotifications(): void {
-    const next = !this.notificationsEnabled();
-    this.notificationsEnabled.set(next);
-    if (!next) {
-      this.notifications.set([]);
-    } else {
-      this.checkAndAutoNotify();
-    }
->>>>>>> Navya-Sri
-  }
-
   protected requiresFilingStatus(): boolean {
     return this.country === 'United States';
   }
@@ -824,20 +735,6 @@ export class TaxEstimatorPage {
     this.stateName = '';
     if (!this.requiresFilingStatus()) {
       this.filingStatus = 'Single';
-<<<<<<< HEAD
-=======
-    }
-    this.checkAndAutoNotify();
-  }
-
-  private checkAndAutoNotify(): void {
-    if (!this.notificationsEnabled() || !this.country) return;
-    const entries = this.calendarEntries();
-    const next = entries.find(e => e.dueDate >= this.today) ?? entries[0];
-    if (!next || this.hasReminder(next)) return;
-    if (this.daysUntil(next.dueDate) <= 7) {
-      this.createReminder(next);
->>>>>>> Navya-Sri
     }
   }
 
@@ -875,16 +772,13 @@ export class TaxEstimatorPage {
     this.quarter = this.quarterOptions()[Math.floor((new Date().getMonth()) / 3)];
     this.taxEstimateService.loadEstimates();
     this.taxEstimateService.loadCalendar();
-<<<<<<< HEAD
 
     const tab = this.route.snapshot.queryParamMap.get('tab');
     if (tab === 'calendar') {
       this.view.set('calendar');
     }
-=======
-    this.checkAndAutoNotify();
->>>>>>> Navya-Sri
   }
+
 
 
   protected stateOptions(): StateOption[] {

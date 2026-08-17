@@ -74,7 +74,6 @@ export interface TaxEstimate {
   createdAt?: string;
   updatedAt?: string;
 }
-<<<<<<< HEAD
 
 export interface ChatMessage {
   id: string;
@@ -100,6 +99,3 @@ export interface ChatbotResponse {
   actionLabel?: string;
   quickPrompts?: string[];
 }
-
-=======
->>>>>>> Riyaz
