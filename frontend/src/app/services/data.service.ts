@@ -31,14 +31,11 @@ export class DataService {
 
   constructor() {
     if (this.authService.isAuthenticated()) {
-      const user = this.authService.currentUser();
-      if (user?.id) {
-        this.loadUserData(user.id);
-      }
+      this.loadUserData();
     }
   }
 
-  public loadUserData(userId: string): void {
+  public loadUserData(userId?: string): void {
     this.transactionService.loadTransactions();
     this.budgetService.loadBudgets();
     this.categoryService.loadCategories();
@@ -49,10 +46,7 @@ export class DataService {
   public async login(username: string, password: string): Promise<boolean> {
     const success = await this.authService.login(username, password);
     if (success) {
-      const user = this.authService.currentUser();
-      if (user?.id) {
-        this.loadUserData(user.id);
-      }
+      this.loadUserData();
     }
     return success;
   }
@@ -60,10 +54,7 @@ export class DataService {
   public async signup(signupData: any): Promise<boolean> {
     const success = await this.authService.signup(signupData);
     if (success) {
-      const user = this.authService.currentUser();
-      if (user?.id) {
-        this.loadUserData(user.id);
-      }
+      this.loadUserData();
     }
     return success;
   }

@@ -15,15 +15,17 @@ export class TransactionService {
   readonly transactions = signal<Transaction[]>([]);
 
   loadTransactions(): void {
-    this.http.get<Transaction[]>(`${this.apiUrl}/transactions`).pipe(
+    this.http.get<any>(`${this.apiUrl}/transactions`).pipe(
       catchError((err) => {
+        console.error('Error loading transactions:', err);
         this.toastService.showError('Failed to load transactions from server.');
         return of([]);
       })
-    ).subscribe((data) => {
-      const mapped = data.map(tx => ({
+    ).subscribe((res) => {
+      const data = Array.isArray(res) ? res : (res?.transactions && Array.isArray(res.transactions) ? res.transactions : []);
+      const mapped = data.map((tx: any) => ({
         ...tx,
-        id: tx.id || (tx as any)._id
+        id: tx.id || tx._id
       }));
       this.transactions.set(mapped);
     });
@@ -41,7 +43,9 @@ export class TransactionService {
         }
       }),
       catchError((err) => {
-        this.toastService.showError('Failed to add transaction to server.');
+        console.error('Error adding transaction:', err);
+        const errorMsg = err?.error?.message || 'Failed to add transaction to server.';
+        this.toastService.showError(errorMsg);
         return of(null);
       })
     );
@@ -59,6 +63,7 @@ export class TransactionService {
         }
       }),
       catchError((err) => {
+        console.error('Error updating transaction:', err);
         this.toastService.showError('Failed to update transaction on server.');
         return of(null);
       })
@@ -71,6 +76,7 @@ export class TransactionService {
         this.transactions.update(items => items.filter(t => t.id !== id && (t as any)._id !== id));
       }),
       catchError((err) => {
+        console.error('Error deleting transaction:', err);
         this.toastService.showError('Failed to delete transaction from server.');
         return of(false);
       })
