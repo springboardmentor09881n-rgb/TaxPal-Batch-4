@@ -1,4 +1,5 @@
 import { Injectable, inject, signal } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
 import { DataService } from './data.service';
 import { Transaction } from '../models';
 import jsPDF from 'jspdf';
@@ -107,6 +108,7 @@ const QUARTER_LABEL_BY_KEY: Partial<Record<ReportPeriodKey, 'Q1' | 'Q2' | 'Q3' |
 @Injectable({ providedIn: 'root' })
 export class ReportService {
   private dataService = inject(DataService);
+  private http = inject(HttpClient);
 
   /** Signal-backed report history, scoped to the signed-in user. */
   readonly reports = signal<GeneratedReport[]>(this.readScopedReports());

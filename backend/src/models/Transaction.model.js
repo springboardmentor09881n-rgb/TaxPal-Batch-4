@@ -36,4 +36,7 @@ const transactionSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
+transactionSchema.index({ userId: 1, date: -1 });
+transactionSchema.index({ userId: 1, category: 1, type: 1, date: 1 });
+
 module.exports = mongoose.model('Transaction', transactionSchema);
