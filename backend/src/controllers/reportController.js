@@ -6,22 +6,23 @@ const User = require('../models/User.model');
 const TaxEstimate = require('../models/taxEstimates.model');
 const PDFDocument = require('pdfkit');
 
-// Maps a user's registered country to the correct currency symbol
-const getCurrencySymbol = (country) => {
+// Maps a user's registered country to PDF-safe and CSV-safe currency details
+const getCurrencyDetails = (country) => {
+  const normalized = country ? country.trim() : '';
   const map = {
-    'United States': '$',
-    'India': '\u20b9',
-    'United Kingdom': '\u00a3',
-    'European Union': '\u20ac',
-    'Germany': '\u20ac',
-    'Japan': '\u00a5',
-    'Canada': 'CA$',
-    'Australia': 'A$',
-    'Singapore': 'S$',
-    'United Arab Emirates': 'AED ',
-    'UAE': 'AED ',
+    'United States': { pdf: '$', csv: '$', code: 'USD' },
+    'India': { pdf: 'INR ', csv: '₹', code: 'INR' },
+    'United Kingdom': { pdf: 'GBP ', csv: '£', code: 'GBP' },
+    'European Union': { pdf: 'EUR ', csv: '€', code: 'EUR' },
+    'Germany': { pdf: 'EUR ', csv: '€', code: 'EUR' },
+    'Japan': { pdf: 'JPY ', csv: '¥', code: 'JPY' },
+    'Canada': { pdf: 'CA$', csv: 'CA$', code: 'CAD' },
+    'Australia': { pdf: 'A$', csv: 'A$', code: 'AUD' },
+    'Singapore': { pdf: 'S$', csv: 'S$', code: 'SGD' },
+    'United Arab Emirates': { pdf: 'AED ', csv: 'AED ', code: 'AED' },
+    'UAE': { pdf: 'AED ', csv: 'AED ', code: 'AED' },
   };
-  return map[country ? country.trim() : ''] || '$';
+  return map[normalized] || { pdf: '$', csv: '$', code: 'USD' };
 };
 
 const getDatesForPeriod = (period) => {
@@ -121,47 +122,22 @@ const calculateReportSnapshot = async (userId, startDate, endDate, reportType, p
       });
     }
   });
-  const budgetComparison = [...budgetCategoryTotals.values()].sort((a, b) => b.budgeted - a.budgeted);
 
-  // Tax estimate calculation
-  const taxEstimates = await TaxEstimate.find({ userId });
-  let estimatedTax = 0;
-  let estimatedTaxNote = '';
+  const budgetComparison = [...budgetCategoryTotals.values()];
 
-  const periodLower = (period || '').toLowerCase();
-  let matchedQuarter = '';
-  if (periodLower.includes('q1')) matchedQuarter = 'Q1';
-  else if (periodLower.includes('q2')) matchedQuarter = 'Q2';
-  else if (periodLower.includes('q3')) matchedQuarter = 'Q3';
-  else if (periodLower.includes('q4')) matchedQuarter = 'Q4';
-
-  if (matchedQuarter) {
-    const matched = taxEstimates.find(e => (e.quarter || '').toUpperCase() === matchedQuarter);
-    if (matched) {
-      estimatedTax = matched.estimatedTax || 0;
-      estimatedTaxNote = 'Based on your saved Tax Estimator figures for this quarter.';
+  // Estimate tax if tax summary report
+  let estimatedTax;
+  let estimatedTaxNote;
+  if ((reportType || '').toLowerCase().includes('tax')) {
+    const userEst = await TaxEstimate.find({ userId }).sort({ createdAt: -1 }).limit(1);
+    if (userEst && userEst.length > 0) {
+      estimatedTax = userEst[0].estimatedTax;
+      estimatedTaxNote = `Based on saved estimate for ${userEst[0].quarter || 'period'}`;
     } else {
-      estimatedTax = Math.max(0, net) * 0.25;
-      estimatedTaxNote = 'Approximate figure (25% of net income). Visit Tax Estimator for a precise calculation.';
+      estimatedTax = Math.max(0, net * 0.20);
+      estimatedTaxNote = 'Estimated at ~20% flat benchmark rate';
     }
-  } else if (taxEstimates.length > 0) {
-    estimatedTax = taxEstimates.reduce((acc, curr) => acc + (curr.estimatedTax || 0), 0);
-    estimatedTaxNote = 'Aggregated from your saved quarterly Tax Estimator entries.';
-  } else {
-    estimatedTax = Math.max(0, net) * 0.25;
-    estimatedTaxNote = 'Approximate figure (25% of net income). Visit Tax Estimator for a precise calculation.';
   }
-
-  const formattedTransactions = transactions.map(t => ({
-    id: t._id ? t._id.toString() : t.id,
-    userId: t.userId ? t.userId.toString() : '',
-    type: t.type,
-    description: t.description || '',
-    category: t.category || '',
-    amount: t.amount || 0,
-    date: t.date ? new Date(t.date).toISOString().split('T')[0] : '',
-    notes: t.notes || ''
-  }));
 
   return {
     totalIncome,
@@ -170,15 +146,21 @@ const calculateReportSnapshot = async (userId, startDate, endDate, reportType, p
     incomeBreakdown,
     expenseBreakdown,
     budgetComparison,
+    transactions: transactions.map(t => ({
+      date: t.date ? new Date(t.date).toISOString().slice(0, 10) : '',
+      type: t.type,
+      category: t.category,
+      description: t.description,
+      amount: t.amount
+    })),
     estimatedTax,
-    estimatedTaxNote,
-    transactions: formattedTransactions
+    estimatedTaxNote
   };
 };
 
 exports.getReports = async (req, res) => {
   try {
-    const reports = await Report.find({ userId: req.user.id }).sort({ generatedDate: -1 });
+    const reports = await Report.find({ userId: req.user.id }).sort({ createdAt: -1 });
     res.json(reports);
   } catch (error) {
     console.error('Error fetching reports:', error);
@@ -188,14 +170,13 @@ exports.getReports = async (req, res) => {
 
 exports.generateReport = async (req, res) => {
   try {
-    const { reportType, period, format, name: customName } = req.body;
+    const { reportType, period, format, name } = req.body;
+
     if (!reportType || !period || !format) {
-      return res.status(400).json({ message: 'reportType, period, and format are required fields.' });
+      return res.status(400).json({ message: 'reportType, period, and format are required' });
     }
 
     const { startDate, endDate } = getDatesForPeriod(period);
-    const name = customName || `${reportType} - ${period}`;
-
     const dataSnapshot = await calculateReportSnapshot(req.user.id, startDate, endDate, reportType, period);
 
     const report = new Report({
@@ -203,7 +184,7 @@ exports.generateReport = async (req, res) => {
       reportType,
       period,
       format,
-      name,
+      name: name || `${reportType} (${period})`,
       startDate,
       endDate,
       data: dataSnapshot
@@ -232,7 +213,7 @@ exports.downloadReport = async (req, res) => {
     }
 
     const user = await User.findById(req.user.id).select('country');
-    const currencySymbol = getCurrencySymbol(user ? user.country : '');
+    const currency = getCurrencyDetails(user ? user.country : '');
 
     // Get snapshot data or fallback to live query
     let data = report.data;
@@ -269,11 +250,11 @@ exports.downloadReport = async (req, res) => {
       y += 18;
 
       doc.fontSize(10).fillColor('#334155');
-      doc.text(`Total Income: ${currencySymbol}${(data.totalIncome || 0).toFixed(2)}`, marginX, y); y += 15;
-      doc.text(`Total Expenses: ${currencySymbol}${(data.totalExpenses || 0).toFixed(2)}`, marginX, y); y += 15;
-      doc.text(`Net Income: ${currencySymbol}${(data.net || 0).toFixed(2)}`, marginX, y); y += 15;
+      doc.text(`Total Income: ${currency.pdf}${(data.totalIncome || 0).toFixed(2)}`, marginX, y); y += 15;
+      doc.text(`Total Expenses: ${currency.pdf}${(data.totalExpenses || 0).toFixed(2)}`, marginX, y); y += 15;
+      doc.text(`Net Income: ${currency.pdf}${(data.net || 0).toFixed(2)}`, marginX, y); y += 15;
       if (data.estimatedTax !== undefined) {
-        doc.text(`Estimated Tax: ${currencySymbol}${(data.estimatedTax || 0).toFixed(2)}`, marginX, y); y += 15;
+        doc.text(`Estimated Tax: ${currency.pdf}${(data.estimatedTax || 0).toFixed(2)}`, marginX, y); y += 15;
       }
       y += 15;
 
@@ -293,7 +274,7 @@ exports.downloadReport = async (req, res) => {
         data.incomeBreakdown.forEach(row => {
           ensureSpace(16);
           doc.text(`${row.category}`, marginX, y);
-          doc.text(`${currencySymbol}${row.amount.toFixed(2)} (${row.percentage.toFixed(1)}%)`, marginX + 300, y);
+          doc.text(`${currency.pdf}${row.amount.toFixed(2)} (${row.percentage.toFixed(1)}%)`, marginX + 300, y);
           y += 14;
         });
         y += 15;
@@ -308,7 +289,7 @@ exports.downloadReport = async (req, res) => {
         data.expenseBreakdown.forEach(row => {
           ensureSpace(16);
           doc.text(`${row.category}`, marginX, y);
-          doc.text(`${currencySymbol}${row.amount.toFixed(2)} (${row.percentage.toFixed(1)}%)`, marginX + 300, y);
+          doc.text(`${currency.pdf}${row.amount.toFixed(2)} (${row.percentage.toFixed(1)}%)`, marginX + 300, y);
           y += 14;
         });
         y += 15;
@@ -324,7 +305,7 @@ exports.downloadReport = async (req, res) => {
           ensureSpace(16);
           const status = row.spent > row.budgeted ? '[Exceeded]' : '[On Track]';
           doc.text(`${row.category}`, marginX, y);
-          doc.text(`Budgeted: ${currencySymbol}${row.budgeted.toFixed(2)} | Spent: ${currencySymbol}${row.spent.toFixed(2)} ${status}`, marginX + 180, y);
+          doc.text(`Budgeted: ${currency.pdf}${row.budgeted.toFixed(2)} | Spent: ${currency.pdf}${row.spent.toFixed(2)} ${status}`, marginX + 180, y);
           y += 14;
         });
         y += 15;
@@ -350,7 +331,7 @@ exports.downloadReport = async (req, res) => {
           doc.text(t.date || '', marginX, y);
           doc.text((t.category || '').slice(0, 20), marginX + 80, y);
           doc.text((t.description || '').slice(0, 35), marginX + 200, y);
-          doc.text(`${sign}${currencySymbol}${(t.amount || 0).toFixed(2)}`, marginX + 420, y);
+          doc.text(`${sign}${currency.pdf}${(t.amount || 0).toFixed(2)}`, marginX + 420, y);
           y += 14;
         });
       }
@@ -362,48 +343,50 @@ exports.downloadReport = async (req, res) => {
       csvLines.push(`Report Name,${report.name}`);
       csvLines.push(`Report Type,${report.reportType}`);
       csvLines.push(`Period,${report.period}`);
+      csvLines.push(`Currency,${currency.code} (${currency.csv})`);
       csvLines.push(`Generated,${new Date(report.generatedDate).toLocaleDateString()}`);
       csvLines.push('');
 
       csvLines.push('SUMMARY');
-      csvLines.push(`Total Income,${(data.totalIncome || 0).toFixed(2)}`);
-      csvLines.push(`Total Expenses,${(data.totalExpenses || 0).toFixed(2)}`);
-      csvLines.push(`Net Income,${(data.net || 0).toFixed(2)}`);
+      csvLines.push(`Total Income (${currency.code}),${(data.totalIncome || 0).toFixed(2)}`);
+      csvLines.push(`Total Expenses (${currency.code}),${(data.totalExpenses || 0).toFixed(2)}`);
+      csvLines.push(`Net Income (${currency.code}),${(data.net || 0).toFixed(2)}`);
       if (data.estimatedTax !== undefined) {
-        csvLines.push(`Estimated Tax,${(data.estimatedTax || 0).toFixed(2)}`);
+        csvLines.push(`Estimated Tax (${currency.code}),${(data.estimatedTax || 0).toFixed(2)}`);
       }
       csvLines.push('');
 
       if (data.incomeBreakdown && data.incomeBreakdown.length > 0) {
-        csvLines.push('INCOME BY CATEGORY', 'Category,Amount,Percentage');
+        csvLines.push('INCOME BY CATEGORY', `Category,Amount (${currency.code}),Percentage`);
         data.incomeBreakdown.forEach(r => csvLines.push(`"${r.category}",${r.amount.toFixed(2)},${r.percentage.toFixed(1)}%`));
         csvLines.push('');
       }
 
       if (data.expenseBreakdown && data.expenseBreakdown.length > 0) {
-        csvLines.push('EXPENSES BY CATEGORY', 'Category,Amount,Percentage');
+        csvLines.push('EXPENSES BY CATEGORY', `Category,Amount (${currency.code}),Percentage`);
         data.expenseBreakdown.forEach(r => csvLines.push(`"${r.category}",${r.amount.toFixed(2)},${r.percentage.toFixed(1)}%`));
         csvLines.push('');
       }
 
       if (data.budgetComparison && data.budgetComparison.length > 0) {
-        csvLines.push('BUDGET VS ACTUAL', 'Category,Budgeted,Spent,Remaining');
+        csvLines.push('BUDGET VS ACTUAL', `Category,Budgeted (${currency.code}),Spent (${currency.code}),Remaining (${currency.code})`);
         data.budgetComparison.forEach(r => csvLines.push(`"${r.category}",${r.budgeted.toFixed(2)},${r.spent.toFixed(2)},${r.remaining.toFixed(2)}`));
         csvLines.push('');
       }
 
       if (data.transactions && data.transactions.length > 0) {
-        csvLines.push('TRANSACTIONS', 'Date,Type,Category,Description,Amount');
+        csvLines.push('TRANSACTIONS', `Date,Type,Category,Description,Amount (${currency.code})`);
         data.transactions.forEach(t => {
           csvLines.push(`${t.date},${t.type},"${t.category}","${(t.description || '').replace(/"/g, '""')}",${(t.amount || 0).toFixed(2)}`);
         });
       }
 
-      const csvContent = csvLines.join('\n');
+      // Prepend UTF-8 Byte Order Mark (\uFEFF) so Excel, Numbers, and Sheets render symbols correctly
+      const csvContent = '\uFEFF' + csvLines.join('\n');
 
       let filename = `${report.name.replace(/\s+/g, '_')}.csv`;
       res.setHeader('Content-disposition', `attachment; filename="${filename}"`);
-      res.setHeader('Content-type', 'text/csv');
+      res.setHeader('Content-type', 'text/csv; charset=utf-8');
       res.send(csvContent);
     } else {
       res.status(400).json({ message: 'Invalid report format' });
