@@ -4,7 +4,7 @@ import { Observable, of } from 'rxjs';
 import { map, tap, catchError } from 'rxjs/operators';
 import { TaxEstimate } from '../models';
 import { environment } from '../../environments/environment';
-import { DataService } from './data.service';
+import { AuthService } from './auth.service';
 import { ToastService } from './toast.service';
 
 export interface TaxCalendarEvent {
@@ -26,10 +26,11 @@ export interface TaxReminder {
 @Injectable({ providedIn: 'root' })
 export class TaxEstimateService {
   private http = inject(HttpClient);
-  private dataService = inject(DataService);
+  private authService = inject(AuthService);
   private toastService = inject(ToastService);
+  private readonly apiUrl = environment.apiUrl;
 
-  readonly estimates = this.dataService.estimates;
+  readonly estimates = signal<TaxEstimate[]>([]);
   readonly calendarEvents = signal<TaxCalendarEvent[]>([]);
   readonly notifications = signal<TaxReminder[]>([]);
 
@@ -61,7 +62,7 @@ export class TaxEstimateService {
   }
 
   public checkAndAutoNotify(): void {
-    const user = this.dataService.currentUser();
+    const user = this.authService.currentUser();
     if (!user) return;
 
     const country = user.country || 'United States';
@@ -103,13 +104,8 @@ export class TaxEstimateService {
     this.notifications.update(list => list.filter(n => n.id !== id));
   }
 
-  private getAuthOptions() {
-    const token = sessionStorage.getItem('tp_token');
-    return token ? { headers: { Authorization: `Bearer ${token}` } } : {};
-  }
-
   loadEstimates(): void {
-    this.http.get<any>(`${environment.apiUrl}/taxes/estimates`, this.getAuthOptions()).pipe(
+    this.http.get<any>(`${this.apiUrl}/taxes/estimates`).pipe(
       catchError(() => {
         this.toastService.showError('Failed to load tax estimates from backend.');
         return of({ estimates: [] });
@@ -118,16 +114,16 @@ export class TaxEstimateService {
       next: (res: any) => {
         const data = res.estimates || res.data || res || [];
         const finalData = Array.isArray(data) ? data : [];
-        this.dataService.estimates.set(finalData);
+        this.estimates.set(finalData);
       }
     });
   }
 
   saveEstimate(estimatePayload: any): Observable<TaxEstimate> {
-    return this.http.post<any>(`${environment.apiUrl}/taxes/estimate`, estimatePayload, this.getAuthOptions()).pipe(
+    return this.http.post<any>(`${this.apiUrl}/taxes/estimate`, estimatePayload).pipe(
       map((res: any) => (res.data || res.taxEstimate || res) as TaxEstimate),
       tap((saved: TaxEstimate) => {
-        this.dataService.estimates.update(current => {
+        this.estimates.update(current => {
           const idx = current.findIndex(e => e._id === saved._id || (e.quarter === saved.quarter && e.dueDate === saved.dueDate));
           if (idx >= 0) {
             const updated = [...current];
@@ -146,7 +142,7 @@ export class TaxEstimateService {
   }
 
   loadCalendar(): void {
-    this.http.get<any>(`${environment.apiUrl}/taxes/calendar`, this.getAuthOptions()).pipe(
+    this.http.get<any>(`${this.apiUrl}/taxes/calendar`).pipe(
       catchError(() => {
         this.toastService.showError('Failed to load tax calendar events.');
         return of([]);
@@ -160,9 +156,9 @@ export class TaxEstimateService {
   }
 
   deleteEstimate(id: string): Observable<any> {
-    return this.http.delete<any>(`${environment.apiUrl}/taxes/estimates/${id}`, this.getAuthOptions()).pipe(
+    return this.http.delete<any>(`${this.apiUrl}/taxes/estimates/${id}`).pipe(
       tap(() => {
-        this.dataService.estimates.update(current => current.filter((item: TaxEstimate) => item._id !== id));
+        this.estimates.update(current => current.filter((item: TaxEstimate) => item._id !== id));
       }),
       catchError((err: any) => {
         this.toastService.showError('Failed to delete tax estimate on server.');

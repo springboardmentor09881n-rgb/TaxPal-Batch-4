@@ -4,8 +4,9 @@ import { Category } from '../models';
 import { Observable, of } from 'rxjs';
 import { tap, catchError } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
-import { DataService } from './data.service';
 import { ToastService } from './toast.service';
+import { TransactionService } from './transaction.service';
+import { BudgetService } from './budget.service';
 
 const DEFAULT_CATEGORIES: Category[] = [
   // Expense Categories
@@ -33,18 +34,15 @@ const DEFAULT_CATEGORIES: Category[] = [
 @Injectable({ providedIn: 'root' })
 export class CategoryService {
   private http = inject(HttpClient);
-  private dataService = inject(DataService);
   private toastService = inject(ToastService);
+  private transactionService = inject(TransactionService);
+  private budgetService = inject(BudgetService);
+  private readonly apiUrl = environment.apiUrl;
 
-  readonly categories = this.dataService.categories;
-
-  private getAuthOptions() {
-    const token = sessionStorage.getItem('tp_token');
-    return token ? { headers: { Authorization: `Bearer ${token}` } } : {};
-  }
+  readonly categories = signal<Category[]>([]);
 
   loadCategories(): void {
-    this.http.get<Category[]>(`${environment.apiUrl}/categories`, this.getAuthOptions()).pipe(
+    this.http.get<Category[]>(`${this.apiUrl}/categories`).pipe(
       catchError((err) => {
         this.toastService.showError('Failed to load categories from server.');
         return of([]);
@@ -52,7 +50,11 @@ export class CategoryService {
     ).subscribe({
       next: (res) => {
         if (res && Array.isArray(res)) {
-          this.dataService.categories.set(res);
+          const mapped = res.map(c => ({
+            ...c,
+            id: c.id || (c as any)._id
+          }));
+          this.categories.set(mapped);
         }
       }
     });
@@ -88,10 +90,11 @@ export class CategoryService {
   }
 
   addCategory(category: any): Observable<Category> {
-    return this.http.post<Category>(`${environment.apiUrl}/categories`, category, this.getAuthOptions()).pipe(
+    return this.http.post<Category>(`${this.apiUrl}/categories`, category).pipe(
       tap((newCat) => {
-        const current = this.dataService.categories();
-        this.dataService.categories.set([...current, newCat]);
+        const current = this.categories();
+        const formatted = { ...newCat, id: newCat.id || (newCat as any)._id };
+        this.categories.set([...current, formatted]);
       }),
       catchError((err) => {
         this.toastService.showError('Failed to save category on server.');
@@ -101,10 +104,10 @@ export class CategoryService {
   }
 
   updateCategory(id: string, category: any): Observable<Category> {
-    return this.http.put<Category>(`${environment.apiUrl}/categories/${id}`, category, this.getAuthOptions()).pipe(
+    return this.http.put<Category>(`${this.apiUrl}/categories/${id}`, category).pipe(
       tap((updatedCat) => {
-        const current = this.dataService.categories().map(c => c._id === id || c.id === id ? { ...c, ...updatedCat } : c);
-        this.dataService.categories.set(current);
+        const current = this.categories().map(c => c._id === id || c.id === id ? { ...c, ...updatedCat } : c);
+        this.categories.set(current);
       }),
       catchError((err) => {
         this.toastService.showError('Failed to update category on server.');
@@ -114,15 +117,41 @@ export class CategoryService {
   }
 
   deleteCategory(id: string): Observable<any> {
-    return this.http.delete<any>(`${environment.apiUrl}/categories/${id}`, this.getAuthOptions()).pipe(
+    return this.http.delete<any>(`${this.apiUrl}/categories/${id}`).pipe(
       tap(() => {
-        this.dataService.categories.set(this.dataService.categories().filter((item: Category) => item._id !== id && item.id !== id));
+        this.categories.set(this.categories().filter((item: Category) => item._id !== id && item.id !== id));
       }),
       catchError((err) => {
         this.toastService.showError('Failed to delete category on server.');
         throw err;
       })
     );
+  }
+
+  renameCategoryCascade(oldName: string, newName: string, type: 'income' | 'expense'): void {
+    const updatedTxList = this.transactionService.transactions().map(t => {
+      if (t.type === type && t.category === oldName) {
+        if (t.id) {
+          this.transactionService.updateTransaction(t.id, { category: newName }).subscribe();
+        }
+        return { ...t, category: newName };
+      }
+      return t;
+    });
+    this.transactionService.transactions.set(updatedTxList);
+
+    if (type === 'expense') {
+      const updatedBudgetList = this.budgetService.budgets().map(b => {
+        if (b.category === oldName) {
+          if (b.id) {
+            this.budgetService.updateBudget(b.id, { category: newName }).subscribe();
+          }
+          return { ...b, category: newName };
+        }
+        return b;
+      });
+      this.budgetService.budgets.set(updatedBudgetList);
+    }
   }
 
   suggestCategory(description: string, type: 'income' | 'expense'): string | null {

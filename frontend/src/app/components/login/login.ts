@@ -2,7 +2,6 @@ import { Component, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { DataService } from '../../services/data.service';
-import { AuthService } from '../../services/auth.service';
 
 @Component({
   selector: 'app-login',
@@ -71,8 +70,6 @@ import { AuthService } from '../../services/auth.service';
           </button>
         </form>
 
-
-
         <!-- Toggle View -->
         <div class="text-center mt-6">
           <p class="text-xs text-slate-500">
@@ -102,7 +99,7 @@ export class Login {
   // Emitters
   public readonly navigateToSignup = output<void>();
 
-  constructor(private dataService: DataService, private authService: AuthService, private router: Router) {}
+  constructor(private dataService: DataService, private router: Router) {}
 
   protected async onSubmit(event: Event): Promise<void> {
     event.preventDefault();
@@ -119,14 +116,8 @@ export class Login {
       return;
     }
 
-    const user = this.dataService.currentUser();
-    if (user) {
-      this.authService.setCurrentUser(user);
-      await this.router.navigate(['/dashboard']);
-    }
+    await this.router.navigate(['/dashboard']);
   }
-
-
 
   protected goToSignup(): void {
     this.navigateToSignup.emit();
