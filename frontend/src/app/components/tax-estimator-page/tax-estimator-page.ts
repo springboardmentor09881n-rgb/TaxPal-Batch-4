@@ -24,6 +24,7 @@ interface TaxResult {
   stateTax: number;
   selfEmploymentTax: number;
   totalTax: number;
+  annualEstimatedTax: number;
   effectiveRate: number;
   takeHome: number;
 }
@@ -538,9 +539,15 @@ function computeProgressiveTax(annualIncome: number, brackets: Bracket[]): numbe
                 <span class="font-bold text-slate-800">{{ currencySymbol() }}{{ result()!.selfEmploymentTax.toLocaleString(locale(), {minimumFractionDigits: 2}) }}</span>
               </div>
 
-              <div class="flex justify-between items-baseline pt-1">
-                <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Total Estimated Tax</span>
-                <span class="text-xl font-black text-red-500">{{ currencySymbol() }}{{ result()!.totalTax.toLocaleString(locale(), {minimumFractionDigits: 2}) }}</span>
+              <div class="space-y-1.5 pt-1">
+                <div class="flex justify-between items-baseline">
+                  <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Est. Quarterly Tax</span>
+                  <span class="text-lg font-black text-red-500">{{ currencySymbol() }}{{ result()!.totalTax.toLocaleString(locale(), {minimumFractionDigits: 2}) }}</span>
+                </div>
+                <div class="flex justify-between items-baseline pb-1">
+                  <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Est. Annual Tax (Year)</span>
+                  <span class="text-sm font-black text-blue-600">{{ currencySymbol() }}{{ result()!.annualEstimatedTax.toLocaleString(locale(), {minimumFractionDigits: 2}) }}</span>
+                </div>
               </div>
 
               <div class="grid grid-cols-2 gap-3 pt-2">
@@ -937,6 +944,7 @@ export class TaxEstimatorPage {
       stateTax,
       selfEmploymentTax,
       totalTax,
+      annualEstimatedTax: totalTax * 4,
       effectiveRate,
       takeHome: gross - totalTax
     });
