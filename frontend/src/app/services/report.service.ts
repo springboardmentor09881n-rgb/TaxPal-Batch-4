@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Observable, tap, catchError, of } from 'rxjs';
 import { DataService } from './data.service';
 import { Transaction } from '../models';
+import { environment } from '../../environments/environment';
 
 export type ReportType = 'income_statement' | 'tax_summary' | 'budget_performance';
 export type ReportPeriodKey = 'current_month' | 'last_month' | 'q1' | 'q2' | 'q3' | 'q4' | 'current_year';
@@ -103,7 +104,7 @@ const PERIOD_RESOLVERS: Record<ReportPeriodKey, PeriodResolver> = {
 export class ReportService {
   private dataService = inject(DataService);
   private http = inject(HttpClient);
-  private readonly apiUrl = 'http://localhost:5000/api/reports';
+  private readonly apiUrl = `${environment.apiUrl}/reports`;
 
   /** Signal-backed report history, loaded directly from the database API. */
   readonly reports = signal<GeneratedReport[]>([]);

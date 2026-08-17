@@ -3,7 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { DataService } from '../../services/data.service';
 import { CategoryService } from '../../services/category.service';
-import { Category } from '../../models';
+import { Category, getCurrencySymbol } from '../../models';
 import { CurrencyFormatterDirective } from '../../directives/currency-formatter.directive';
 
 interface MonthlyTotal {
@@ -58,7 +58,7 @@ interface CategoryTotal {
                 <path stroke-linecap="round" stroke-linejoin="round" d="m15 11.25-3-3m0 0-3 3m3-3v7.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" />
               </svg>
             </div>
-            <p class="text-2xl font-black text-slate-900 mt-2">₹{{ monthlyIncome().toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2}) }}</p>
+            <p class="text-2xl font-black text-slate-900 mt-2">{{ currencySymbol() }}{{ monthlyIncome().toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2}) }}</p>
           </div>
           <p class="text-[10px] font-semibold text-slate-500 mt-4 flex items-center gap-1">
             <span class="text-emerald-600">↑ 12%</span> from last month
@@ -74,7 +74,7 @@ interface CategoryTotal {
                 <path stroke-linecap="round" stroke-linejoin="round" d="m9 12.75 3 3m0 0 3-3m-3 3v-7.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" />
               </svg>
             </div>
-            <p class="text-2xl font-black text-slate-900 mt-2">₹{{ monthlyExpenses().toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2}) }}</p>
+            <p class="text-2xl font-black text-slate-900 mt-2">{{ currencySymbol() }}{{ monthlyExpenses().toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2}) }}</p>
           </div>
           <p class="text-[10px] font-semibold text-slate-500 mt-4 flex items-center gap-1">
             <span class="text-red-500">↓ 8%</span> from last month
@@ -90,7 +90,7 @@ interface CategoryTotal {
                 <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3Z" />
               </svg>
             </div>
-            <p class="text-2xl font-black text-slate-900 mt-2">₹{{ estimatedTaxDue().toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2}) }}</p>
+            <p class="text-2xl font-black text-slate-900 mt-2">{{ currencySymbol() }}{{ estimatedTaxDue().toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2}) }}</p>
           </div>
           <p class="text-[10px] font-semibold text-slate-500 mt-4 flex items-center gap-1">
             Calculating next installment
@@ -215,7 +215,7 @@ interface CategoryTotal {
                 </svg>
                 <div class="absolute inset-0 flex flex-col items-center justify-center select-none">
                   <span class="text-xs text-slate-400 font-bold uppercase tracking-wider">Total spent</span>
-                  <span class="text-lg font-black text-slate-900">₹{{ monthlyExpenses().toLocaleString('en-IN', {maximumFractionDigits: 0}) }}</span>
+                  <span class="text-lg font-black text-slate-900">{{ currencySymbol() }}{{ monthlyExpenses().toLocaleString('en-IN', {maximumFractionDigits: 0}) }}</span>
                 </div>
               </div>
 
@@ -270,7 +270,7 @@ interface CategoryTotal {
                     </span>
                   </td>
                   <td class="py-3.5 text-right font-bold" [class.text-emerald-600]="tx.type === 'income'" [class.text-red-500]="tx.type === 'expense'">
-                    {{ tx.type === 'income' ? '+' : '-' }}₹{{ tx.amount.toLocaleString('en-IN', {minimumFractionDigits: 2}) }}
+                    {{ tx.type === 'income' ? '+' : '-' }}{{ currencySymbol() }}{{ tx.amount.toLocaleString('en-IN', {minimumFractionDigits: 2}) }}
                   </td>
                   <td class="py-3.5 text-center">
                     <span 
@@ -326,7 +326,7 @@ interface CategoryTotal {
                 <div>
                   <label for="amount" class="block text-xs font-semibold text-slate-600 uppercase mb-2">Amount</label>
                   <div class="relative">
-                    <span class="absolute left-3.5 top-2.5 text-xs text-slate-400 font-bold">₹</span>
+                    <span class="absolute left-3.5 top-2.5 text-xs text-slate-400 font-bold">{{ currencySymbol() }}</span>
                     <input 
                       id="amount"
                       name="amount"
@@ -454,17 +454,20 @@ export class Dashboard implements OnInit {
     }));
   });
 
+  protected currencySymbol = computed(() => getCurrencySymbol(this.dataService.currentUser()?.country));
+
   protected formatYLabel(val: number): string {
-    if (val === 0) return '₹0';
+    const sym = this.currencySymbol();
+    if (val === 0) return `${sym}0`;
     if (val >= 100000) {
       const formatted = (val / 100000).toFixed(val % 100000 === 0 ? 0 : 1);
-      return `₹${formatted}L`;
+      return `${sym}${formatted}L`;
     }
     if (val >= 1000) {
       const formatted = (val / 1000).toFixed(val % 1000 === 0 ? 0 : 1);
-      return `₹${formatted}k`;
+      return `${sym}${formatted}k`;
     }
-    return `₹${Math.round(val)}`;
+    return `${sym}${Math.round(val)}`;
   }
 
   protected barPixelHeight(val: number): number {
@@ -492,11 +495,63 @@ export class Dashboard implements OnInit {
   });
 
   protected estimatedTaxDue = computed(() => {
-    // Dynamic India slab estimate: Standard new tax regime:
-    // We calculate standard 15% estimated net tax slab on taxable receipts
     const netProfit = this.monthlyIncome() - this.monthlyExpenses();
-    return netProfit > 0 ? netProfit * 0.15 : 0;
+    if (netProfit <= 0) return 0;
+
+    const user = this.dataService.currentUser();
+    const country = user?.country || 'India';
+    const state = user?.state || '';
+
+    return this.computeTaxForNet(netProfit, country, state);
   });
+
+  private computeTaxForNet(taxableIncome: number, country: string, state: string): number {
+    if (taxableIncome <= 0) return 0;
+    const annualizedNet = taxableIncome * 4;
+    const normCountry = (country || 'India').trim();
+
+    if (normCountry === 'India') {
+      const INDIA_SLABS = [
+        { upTo: 300000, rate: 0 },
+        { upTo: 700000, rate: 0.05 },
+        { upTo: 1000000, rate: 0.10 },
+        { upTo: 1200000, rate: 0.15 },
+        { upTo: 1500000, rate: 0.20 },
+        { upTo: Infinity, rate: 0.30 }
+      ];
+      let lower = 0;
+      let tax = 0;
+      for (const bracket of INDIA_SLABS) {
+        if (annualizedNet <= lower) break;
+        const taxable = Math.min(annualizedNet, bracket.upTo) - lower;
+        tax += taxable * bracket.rate;
+        lower = bracket.upTo;
+        if (annualizedNet <= bracket.upTo) break;
+      }
+      const quarterlyFed = tax / 4;
+      return quarterlyFed + (quarterlyFed * 0.04);
+    } else if (normCountry === 'United States') {
+      const US_SLABS = [
+        { upTo: 11925, rate: 0.10 }, { upTo: 48475, rate: 0.12 }, { upTo: 103350, rate: 0.22 },
+        { upTo: 197300, rate: 0.24 }, { upTo: 250525, rate: 0.32 }, { upTo: 626350, rate: 0.35 },
+        { upTo: Infinity, rate: 0.37 }
+      ];
+      let lower = 0;
+      let tax = 0;
+      for (const bracket of US_SLABS) {
+        if (annualizedNet <= lower) break;
+        const taxable = Math.min(annualizedNet, bracket.upTo) - lower;
+        tax += taxable * bracket.rate;
+        lower = bracket.upTo;
+        if (annualizedNet <= bracket.upTo) break;
+      }
+      const quarterlyFed = tax / 4;
+      const selfEmpTax = taxableIncome * 0.153;
+      return quarterlyFed + selfEmpTax;
+    } else {
+      return taxableIncome * 0.20;
+    }
+  }
 
   protected savingsRate = computed(() => {
     const income = this.monthlyIncome();

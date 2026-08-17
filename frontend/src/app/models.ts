@@ -102,3 +102,23 @@ export interface ChatbotResponse {
   actionLabel?: string;
   quickPrompts?: string[];
 }
+
+export const CURRENCY_MAP: Record<string, string> = {
+  'India': '₹',
+  'United States': '$',
+  'United Kingdom': '£',
+  'European Union': '€',
+  'Germany': '€',
+  'Japan': '¥',
+  'Canada': 'CA$',
+  'Australia': 'A$',
+  'Singapore': 'S$',
+  'United Arab Emirates': 'AED',
+  'UAE': 'AED',
+};
+
+export function getCurrencySymbol(country?: string): string {
+  if (!country) return '$';
+  return CURRENCY_MAP[country.trim()] || '$';
+}
+

@@ -388,3 +388,36 @@ exports.deleteTaxEstimate = async (req, res) => {
     }
 };
 
+exports.previewTaxEstimate = (req, res) => {
+    try {
+        const {
+            country,
+            state,
+            filingStatus,
+            grossIncomeForQuarter,
+            businessExpenses,
+            retirementContributions,
+            healthInsurancePremiums,
+            homeOfficeDeductions
+        } = req.body;
+
+        const totalDeductions = (Number(businessExpenses) || 0) +
+            (Number(retirementContributions) || 0) +
+            (Number(healthInsurancePremiums) || 0) +
+            (Number(homeOfficeDeductions) || 0);
+
+        const taxableIncome = Math.max(0, (Number(grossIncomeForQuarter) || 0) - totalDeductions);
+        const estimatedTax = calculateTax(taxableIncome, filingStatus, country, state);
+
+        res.status(200).json({
+            success: true,
+            taxableIncome,
+            estimatedTax
+        });
+    } catch (error) {
+        console.error("Error previewing tax estimate:", error);
+        res.status(500).json({ success: false, message: "Server Error", error: error.message });
+    }
+};
+
+

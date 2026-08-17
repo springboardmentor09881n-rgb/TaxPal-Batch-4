@@ -6,6 +6,9 @@ const taxController = require('../controllers/taxController');
 // Calculate and save tax estimate
 router.post('/estimate', auth, taxController.calculateTaxEstimate);
 
+// Preview tax estimate calculation without saving
+router.post('/preview', auth, taxController.previewTaxEstimate);
+
 // Get all tax estimates for user
 router.get('/estimates', auth, taxController.getTaxEstimates);
 

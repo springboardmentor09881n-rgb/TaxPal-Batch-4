@@ -3,18 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ReportService, GeneratedReport, ReportType, ReportPeriodKey, ReportFormat } from '../../services/report.service';
 import { DataService } from '../../services/data.service';
-
-const CURRENCY_BY_COUNTRY: Record<string, string> = {
-  'India': '₹',
-  'United States': '$',
-  'United Kingdom': '£',
-  'European Union': '€',
-  'Japan': '¥',
-  'Canada': 'CA$',
-  'Australia': 'A$',
-  'Singapore': 'S$',
-  'United Arab Emirates': 'AED',
-};
+import { getCurrencySymbol } from '../../models';
 
 const NON_QUARTER_PERIODS: ReportPeriodKey[] = ['current_month', 'last_month', 'current_year'];
 
@@ -886,9 +875,47 @@ const REPORT_TYPE_LABEL: Record<ReportType, string> = {
       gap: 0.75rem;
       margin-bottom: 0.5rem;
     }
-    @media (max-width: 600px) {
+    @media (max-width: 640px) {
+      .reports-stacked-container {
+        padding: 1rem;
+        gap: 1rem;
+      }
+      .report-sheet-wrapper {
+        padding: 0.5rem;
+      }
+      .report-sheet {
+        padding: 1rem;
+        min-height: auto;
+        gap: 1.25rem;
+      }
+      .report-sheet .sheet-header {
+        flex-direction: column;
+        gap: 1rem;
+        align-items: flex-start;
+      }
+      .report-sheet .sheet-header-right {
+        text-align: left;
+        margin-top: 0;
+      }
       .report-sheet .sheet-metrics-row, .report-sheet .sheet-metrics-row-4 {
         grid-template-columns: 1fr;
+      }
+      .report-sheet .sheet-footer {
+        flex-direction: column;
+        gap: 0.35rem;
+        text-align: left;
+      }
+      .preview-report-title {
+        max-width: 100%;
+      }
+      .preview-actions-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.75rem;
+      }
+      .preview-actions-buttons {
+        width: 100%;
+        justify-content: flex-end;
       }
     }
     .report-sheet .sheet-metric-card {
@@ -927,6 +954,10 @@ const REPORT_TYPE_LABEL: Record<ReportType, string> = {
     }
     .report-sheet .text-warning {
       color: #d97706 !important;
+    }
+    .report-sheet .sheet-grid-wrapper, .report-sheet .sheet-section-wrapper {
+      overflow-x: auto;
+      max-width: 100%;
     }
     .report-sheet .sheet-grids-section {
       display: grid;
@@ -1140,8 +1171,7 @@ export class ReportsComponent {
   readonly selectedReport = signal<GeneratedReport | null>(null);
 
   readonly currencySymbol = computed(() => {
-    const country = this.dataService.currentUser()?.country || 'India';
-    return CURRENCY_BY_COUNTRY[country] ?? '$';
+    return getCurrencySymbol(this.dataService.currentUser()?.country);
   });
 
   onReportTypeChange(type: ReportType): void {

@@ -13,13 +13,15 @@ const getCurrencySymbol = (country) => {
     'India': '\u20b9',
     'United Kingdom': '\u00a3',
     'European Union': '\u20ac',
+    'Germany': '\u20ac',
     'Japan': '\u00a5',
     'Canada': 'CA$',
     'Australia': 'A$',
     'Singapore': 'S$',
     'United Arab Emirates': 'AED ',
+    'UAE': 'AED ',
   };
-  return map[country] || '$';
+  return map[country ? country.trim() : ''] || '$';
 };
 
 const getDatesForPeriod = (period) => {

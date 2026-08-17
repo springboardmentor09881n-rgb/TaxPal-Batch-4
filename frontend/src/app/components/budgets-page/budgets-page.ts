@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { BudgetService } from '../../services/budget.service';
 import { CategoryService } from '../../services/category.service';
 import { DataService } from '../../services/data.service';
-import { Budget } from '../../models';
+import { Budget, getCurrencySymbol } from '../../models';
 import { CurrencyFormatterDirective } from '../../directives/currency-formatter.directive';
 
 @Component({
@@ -172,20 +172,7 @@ export class BudgetsPageComponent implements OnInit {
   };
 
   get currencySymbol(): string {
-    const country = this.dataService.currentUser()?.country || 'India';
-    switch (country) {
-      case 'India': return '₹';
-      case 'United Kingdom': return '£';
-      case 'European Union':
-      case 'Germany': return '€';
-      case 'Japan': return '¥';
-      case 'Canada': return 'CA$';
-      case 'Australia': return 'A$';
-      case 'Singapore': return 'S$';
-      case 'United Arab Emirates':
-      case 'UAE': return 'AED';
-      default: return '$';
-    }
+    return getCurrencySymbol(this.dataService.currentUser()?.country);
   }
 
   ngOnInit() {

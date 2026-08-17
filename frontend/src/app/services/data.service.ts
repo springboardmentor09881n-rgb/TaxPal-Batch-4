@@ -3,6 +3,7 @@ import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { catchError, firstValueFrom, of } from 'rxjs';
 import { User, Transaction, Budget, Report, Category, TaxEstimate } from '../models';
 import { ToastService } from './toast.service';
+import { environment } from '../../environments/environment';
 
 @Injectable({
   providedIn: 'root'
@@ -14,7 +15,7 @@ export class DataService {
   public readonly categories = signal<Category[]>([]);
   public readonly estimates = signal<TaxEstimate[]>([]);
 
-  private readonly apiUrl = 'http://localhost:5000/api';
+  private readonly apiUrl = environment.apiUrl;
   private readonly toastService = inject(ToastService);
 
   constructor(private http: HttpClient) {

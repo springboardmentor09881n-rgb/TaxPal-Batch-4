@@ -161,14 +161,15 @@ exports.forgotPassword = async (req, res) => {
     }
 
     // Generate a secure random token valid for 5 minutes
-    const token = crypto.randomBytes(32).toString('hex');
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const hashedToken = crypto.createHash('sha256').update(resetToken).digest('hex');
     const expires = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
 
-    user.resetPasswordToken = token;
+    user.resetPasswordToken = hashedToken;
     user.resetPasswordExpires = expires;
     await user.save();
 
-    const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
+    const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
 
     await sendEmail({
       to: user.email,
@@ -210,8 +211,10 @@ exports.resetPassword = async (req, res) => {
       return res.status(400).json({ message: 'Token and new password are required.' });
     }
 
+    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+
     const user = await User.findOne({
-      resetPasswordToken: token,
+      resetPasswordToken: hashedToken,
       resetPasswordExpires: { $gt: new Date() }, // Token must not be expired
     });
 
