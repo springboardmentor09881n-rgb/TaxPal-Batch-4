@@ -551,33 +551,6 @@ export class DataService {
     ).subscribe();
   }
 
-  public generateReport(reportType: string, period: string, format: 'PDF' | 'CSV'): void {
-    const user = this.currentUser();
-    if (!user) return;
-
-    const formattedDate = new Date().toLocaleDateString('en-IN', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
-
-    const newReport: Report = {
-      id: 'rep_' + Date.now(),
-      userId: user.id,
-      reportType,
-      period,
-      format,
-      generatedDate: formattedDate,
-      name: `${reportType.replace(' ', '_')}_${period.replace(' ', '_')}_${Date.now().toString().slice(-4)}`
-    };
-
-    const allReports = this.getData<Report>('tp_reports');
-    allReports.push(newReport);
-    this.saveData('tp_reports', allReports);
-
-    this.reports.update(items => [newReport, ...items]);
-  }
-
   private seedDefaultCategories(userId: string): void {
     const defaults: Omit<Category, 'id' | 'userId'>[] = [
       { type: 'expense', name: 'Office Rent', color: '#3b82f6' },

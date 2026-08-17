@@ -75,9 +75,9 @@ const getDatesForPeriod = (period) => {
 exports.generateReport = async (req, res) => {
   try {
     const { reportType, period, format } = req.body;
-    
+
     const { startDate, endDate } = getDatesForPeriod(period);
-    
+
     const name = `${reportType} - ${period}`;
 
     const report = await Report.create({
@@ -100,7 +100,7 @@ exports.generateReport = async (req, res) => {
 exports.downloadReport = async (req, res) => {
   try {
     const report = await Report.findById(req.params.id);
-    
+
     if (!report) {
       return res.status(404).json({ message: 'Report not found' });
     }
@@ -152,32 +152,31 @@ exports.downloadReport = async (req, res) => {
 
       doc.fontSize(16).text('Transactions');
       doc.moveDown();
-      
+
       const tableTop = doc.y;
-      const columnSpacing = 20;
       const dateX = 50;
       const descX = 150;
       const typeX = 350;
       const amountX = 450;
-      
+
       doc.fontSize(12).text('Date', dateX, tableTop, { underline: true });
       doc.text('Description', descX, tableTop, { underline: true });
       doc.text('Type', typeX, tableTop, { underline: true });
       doc.text('Amount', amountX, tableTop, { underline: true });
-      
+
       let y = tableTop + 20;
-      
+
       transactions.forEach(t => {
         if (y > 700) {
           doc.addPage();
           y = 50;
         }
-        
+
         doc.fontSize(10).text(new Date(t.date).toLocaleDateString(), dateX, y);
         doc.text(t.description || t.category, descX, y);
         doc.text(t.type, typeX, y);
         doc.text(`${currencySymbol}${t.amount.toFixed(2)}`, amountX, y);
-        
+
         y += 20;
       });
 
@@ -195,7 +194,7 @@ exports.downloadReport = async (req, res) => {
         description: t.description || '',
         amount: t.amount
       }));
-      
+
       const parser = new Parser({ fields });
       const csv = parser.parse(data);
 
