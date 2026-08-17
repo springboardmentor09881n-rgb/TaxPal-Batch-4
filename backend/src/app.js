@@ -9,6 +9,7 @@ const budgetRoutes = require('./routes/budgets');
 const categoryRoutes = require('./routes/categories');
 const taxRoutes = require('./routes/tax');
 const chatbotRoutes = require('./routes/chatbot');
+const reportRoutes = require('./routes/reports');
 
 // Middleware
 app.use(cors());
@@ -21,5 +22,6 @@ app.use('/api/budgets', budgetRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/taxes', taxRoutes);
 app.use('/api/chatbot', chatbotRoutes);
+app.use('/api/reports', reportRoutes);
 
 module.exports = app;
