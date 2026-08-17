@@ -1,6 +1,15 @@
 # 🎨 TaxPal - Frontend Angular Client Application Documentation
 
-The **TaxPal Frontend Application** is a modern, responsive web client built with **Angular v21**, featuring **Standalone Components**, the reactive **Angular Signals API**, **RxJS state streams**, and styled with **TailwindCSS v4**. It provides a smooth user experience for managing personal finances, category budgeting, smart transaction auto-categorization, advance tax estimations, tax calendar alerts, interactive report exports, and an embedded AI chatbot assist widget.
+The **TaxPal Frontend Application** is a responsive web client built with **Angular v21**, featuring **Standalone Components**, the reactive **Angular Signals API**, **RxJS state streams**, and styled with **TailwindCSS v4**. It provides a user experience for managing personal finances, category budgeting, smart transaction auto-categorization, advance tax estimations, tax calendar alerts, interactive report exports, and an embedded AI chatbot assist widget.
+
+---
+
+## 🚀 Live Production Deployment
+
+- 🌐 **Live Application URL**: [https://taxpal-blue.vercel.app](https://taxpal-blue.vercel.app)
+- 🖥️ **Hosting Provider**: **Vercel**
+- ⚡ **Target Backend REST API**: `https://taxpal-f8g1.onrender.com/api`
+- ⚙️ **SPA Routing Config**: Managed via [`vercel.json`](file:///c:/Users/igved/Documents/infosys-project/TaxPal-Batch-4/frontend/vercel.json)
 
 ---
 
@@ -8,13 +17,42 @@ The **TaxPal Frontend Application** is a modern, responsive web client built wit
 
 | Category | Technology | Version | Description / Purpose |
 |---|---|---|---|
-| **Framework** | Angular | `v21.1.0` | Client-side Single Page Application (SPA) framework |
+| **Framework** | Angular | `v21.2.0` | Client-side Single Page Application (SPA) framework |
 | **Architecture** | Standalone Components | — | Modern Angular modular structure without standard `NgModule` boilerplate |
 | **State Management** | Angular Signals & RxJS | `^7.8.0` | Reactive state management (`signal`, `computed`, `effect`, `BehaviorSubject`) |
-| **Styling** | TailwindCSS & PostCSS | `^4.0.0` | Utility-first CSS framework with `@tailwindcss/postcss` |
+| **Styling** | TailwindCSS & PostCSS | `^4.1.12` / `^8.5.3` | Utility-first CSS framework with `@tailwindcss/postcss` |
 | **Language** | TypeScript | `~5.9.2` | Strongly typed JavaScript |
-| **HTTP & Routing** | Angular `HttpClient` & Router | `v21.1.0` | REST API communication, interceptors, and protected client routes |
-| **Build & Test** | Angular CLI & Vitest | `v21.1.2` / `^3.0.5` | Fast building, hot-reloading development server, and unit testing |
+| **HTTP & Routing** | Angular `HttpClient` & Router | `v21.2.0` | REST API communication, interceptors, and protected client routes |
+| **PDF Client Export** | jsPDF | `^4.2.1` | Client-side PDF preview and document utilities |
+| **Build & Test** | Angular CLI & Vitest | `v21.2.18` / `^4.0.8` | Fast building, hot-reloading development server, and unit testing |
+
+---
+
+## ⚙️ Environment Configuration & Deployment Setup
+
+### 1. Production API Endpoint (`environment.ts`)
+The API base URL used by Angular services is defined in `src/environments/environment.ts`:
+
+```typescript
+export const environment = {
+  production: true,
+  apiUrl: 'https://taxpal-f8g1.onrender.com/api'
+};
+```
+
+### 2. Vercel SPA Routing Configuration (`vercel.json`)
+To support Angular client-side deep linking without 404 page refreshes, `vercel.json` maps all incoming web paths back to `index.html`:
+
+```json
+{
+    "rewrites": [
+        {
+            "source": "/(.*)",
+            "destination": "/index.html"
+        }
+    ]
+}
+```
 
 ---
 
@@ -63,10 +101,13 @@ frontend/
 │   │   ├── models.ts                       # TypeScript interfaces (`User`, `Transaction`, `Budget`, etc.)
 │   │   ├── app.config.ts                   # Client providers (HttpClient, Router, Animations)
 │   │   └── app.ts                          # Root component host
+│   ├── environments/                       # Environment configuration files
+│   │   └── environment.ts                  # Target API base URL setup
 │   ├── public/                             # Static assets (brand icons, images)
 │   ├── index.html                          # Single page HTML entry file
 │   └── styles.css                          # Global Tailwind imports & custom scrollbar styles
 ├── angular.json                            # Angular CLI workspace configuration
+├── vercel.json                             # Vercel deployment SPA rewrite rules
 ├── package.json                            # Package scripts & dependencies
 ├── tsconfig.json                           # TypeScript compiler settings
 └── README.md                               # Frontend architecture guide
@@ -131,6 +172,20 @@ As the user types a transaction description in the **Record Transaction** modal,
 
 ### 4. Over-Budget & Tax Deadline Drawer (`TaxNotificationPanel`)
 - Slides out from the top-right header to show urgent tax deadlines (e.g., Q1/Q2/Q3/Q4 estimated tax due dates) and warning badges for budget categories exceeding 75% or 100% of their limit.
+
+---
+
+## 🚀 Deploying Frontend to Vercel
+
+```bash
+# 1. Install Vercel CLI (optional)
+npm install -g vercel
+
+# 2. Deploy directly from command line
+vercel --prod
+```
+
+Or connect your GitHub repository directly to Vercel dashboard.
 
 ---
 
