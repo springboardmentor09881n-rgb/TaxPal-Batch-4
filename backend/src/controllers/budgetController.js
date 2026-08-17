@@ -1,5 +1,5 @@
 const Budget = require('../models/budgets.model');
-const Transaction = require('../models/transaction.model');
+const Transaction = require('../models/Transaction.model');
 
 // Helper to calculate spent and remaining for a budget document
 async function formatBudgetWithSpent(budgetDoc, userId) {

@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 const Report = require('../models/report.model');
-const Transaction = require('../models/transaction.model');
+const Transaction = require('../models/Transaction.model');
 const Budget = require('../models/budgets.model');
 const User = require('../models/User.model');
 const TaxEstimate = require('../models/taxEstimates.model');
