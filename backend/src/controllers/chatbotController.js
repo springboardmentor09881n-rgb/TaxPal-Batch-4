@@ -1,7 +1,13 @@
 /**
  * Chatbot Controller - TaxPal Assist Knowledge & Query Engine
- * 100% Standalone Rule-Based Engine (Zero LLM / External API required)
+ * Standalone Rule-Based Engine + Personalized User Financial AI Engine
  */
+
+const User = require('../models/User.model');
+const Transaction = require('../models/Transaction.model');
+const Budget = require('../models/budgets.model');
+const TaxEstimate = require('../models/taxEstimates.model');
+
 
 const KNOWLEDGE_BASE = [
   {
@@ -251,6 +257,97 @@ function scoreKnowledgeEntry(entry, text, normalizedText, currentRoute) {
 }
 
 /**
+ * Helper to map country to local currency symbol
+ */
+function getCurrencySymbol(country) {
+  if (!country) return '$';
+  const c = country.trim().toLowerCase();
+  if (c === 'india' || c === 'in' || c === 'ind') return '₹';
+  if (c === 'united kingdom' || c === 'uk' || c === 'gb') return '£';
+  if (c === 'canada' || c === 'ca') return 'CA$';
+  if (c === 'australia' || c === 'au') return 'A$';
+  if (c === 'japan' || c === 'jp') return '¥';
+  if (c === 'germany' || c === 'european union' || c === 'eu') return '€';
+  if (c === 'united arab emirates' || c === 'uae') return 'AED ';
+  return '$';
+}
+
+/**
+ * Aggregates live financial context for a given logged-in user
+ */
+async function getUserFinancialContext(userId) {
+  if (!userId) return null;
+  try {
+    const user = await User.findById(userId).select('fullName email country incomeBracket').lean();
+    if (!user) return null;
+
+    const currencySymbol = getCurrencySymbol(user.country);
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+
+    // Fetch transactions
+    const transactions = await Transaction.find({ userId }).sort({ date: -1 }).limit(50).lean();
+
+    let totalIncomeThisMonth = 0;
+    let totalExpenseThisMonth = 0;
+    const categoryTotalsThisMonth = {};
+
+    transactions.forEach(tx => {
+      const txDate = new Date(tx.date);
+      if (txDate >= startOfMonth && txDate <= endOfMonth) {
+        if (tx.type === 'income') {
+          totalIncomeThisMonth += tx.amount;
+        } else if (tx.type === 'expense') {
+          totalExpenseThisMonth += tx.amount;
+          categoryTotalsThisMonth[tx.category] = (categoryTotalsThisMonth[tx.category] || 0) + tx.amount;
+        }
+      }
+    });
+
+    const recentTxList = transactions.slice(0, 5).map(tx =>
+      `- ${tx.type.toUpperCase()}: ${tx.description} (${currencySymbol}${tx.amount}) [Category: ${tx.category}] on ${new Date(tx.date).toLocaleDateString()}`
+    ).join('\n');
+
+    // Fetch budgets
+    const budgets = await Budget.find({ userId }).lean();
+    const budgetSummaryList = budgets.map(b => {
+      const spent = categoryTotalsThisMonth[b.category] || 0;
+      const pct = b.budget_amount > 0 ? Math.round((spent / b.budget_amount) * 100) : 0;
+      let status = 'Safe';
+      if (pct >= 100) status = 'OVER BUDGET (Exceeded cap)';
+      else if (pct >= 75) status = 'Warning (Near budget cap)';
+      return `- Category "${b.category}": Monthly Cap ${currencySymbol}${b.budget_amount}, Spent ${currencySymbol}${spent} (${pct}% used - ${status})`;
+    }).join('\n');
+
+    // Fetch latest Tax Estimate
+    const latestTaxEstimate = await TaxEstimate.findOne({ userId }).sort({ updatedAt: -1 }).lean();
+    let taxSummary = 'No tax estimate created yet.';
+    if (latestTaxEstimate) {
+      const taxCurrency = getCurrencySymbol(latestTaxEstimate.country || user.country);
+      taxSummary = `Country: ${latestTaxEstimate.country}, Quarter: ${latestTaxEstimate.quarter}, Estimated Tax: ${taxCurrency}${latestTaxEstimate.estimatedTax}, Filing Status: ${latestTaxEstimate.filingStatus}, State: ${latestTaxEstimate.state}, Due Date: ${new Date(latestTaxEstimate.dueDate).toLocaleDateString()}`;
+    }
+
+    return {
+      fullName: user.fullName,
+      country: user.country,
+      currencySymbol,
+      email: user.email,
+      incomeBracket: user.incomeBracket,
+      totalIncomeThisMonth,
+      totalExpenseThisMonth,
+      categoryTotalsThisMonth,
+      recentTxList: recentTxList || 'No recent transactions recorded.',
+      budgetSummaryList: budgetSummaryList || 'No category budget caps configured.',
+      taxSummary
+    };
+  } catch (err) {
+    console.error('[Chatbot Controller] Error fetching user financial context:', err);
+    return null;
+  }
+}
+
+/**
  * Controller endpoint: POST /api/chatbot/query
  */
 exports.processChatQuery = async (req, res) => {
@@ -267,6 +364,7 @@ exports.processChatQuery = async (req, res) => {
     const rawText = query.trim();
     const normalized = normalizeText(rawText);
 
+    // 1. Calculate Rule Engine Best Match
     let bestMatch = null;
     let highestScore = 0;
 
@@ -278,11 +376,139 @@ exports.processChatQuery = async (req, res) => {
       }
     }
 
-    // Threshold cutoff for confidence
+    // 2. Fetch User Financial Context if Authenticated
+    const userId = req.user?.id || req.user?._id;
+    const userContext = await getUserFinancialContext(userId);
+
+    // 3. Try Personalized Groq AI Engine First (If GROQ_API_KEY is available)
+    const groqApiKey = process.env.GROQ_API_KEY;
+    if (groqApiKey && groqApiKey.trim()) {
+      try {
+        const modelsToTry = [
+          'openai/gpt-oss-120b',
+          'llama3-70b-8192',
+          'llama3-8b-8192',
+          'mixtral-8x7b-32768'
+        ];
+
+        let systemPrompt = `You are TaxPal Assist, an intelligent, friendly financial assistant for TaxPal (a personal finance & advance tax estimation app).`;
+
+        if (userContext) {
+          systemPrompt += `
+
+Current Logged-In User Profile & Live Financial Context:
+- User Name: ${userContext.fullName}
+- Registered Country: ${userContext.country}
+- Currency Symbol: "${userContext.currencySymbol}"
+- Total Income (Current Month): ${userContext.currencySymbol}${userContext.totalIncomeThisMonth}
+- Total Expenses (Current Month): ${userContext.currencySymbol}${userContext.totalExpenseThisMonth}
+- Category Monthly Budgets Progress:
+${userContext.budgetSummaryList}
+- Tax Estimation Data: ${userContext.taxSummary}
+- Recent Transactions Feed:
+${userContext.recentTxList}
+
+Personalized Instructions:
+1. Address ${userContext.fullName} warmly.
+2. The user's local currency symbol is "${userContext.currencySymbol}". ALWAYS display all monetary amounts, balances, incomes, expenses, budgets, and tax estimates using "${userContext.currencySymbol}" (e.g. ${userContext.currencySymbol}${userContext.totalIncomeThisMonth || 5000}) rather than dollar signs ($) unless explicitly requested.
+3. If the user asks about their income, expenses, budgets, taxes, transactions, balance, or financial status, use the EXACT live numbers provided in their context above.
+4. Keep answers concise, accurate, and under 4 sentences or bullet points.
+5. Format key numbers and important terms in **bold** and code elements in \`code\`.`;
+        } else {
+          systemPrompt += `
+
+App Features Knowledge:
+- Smart Auto-Categorization & Transactions (Route: /transactions)
+- Category Monthly Budgets & Over-budget alerts (Route: /budgets)
+- Multi-Country Advance Tax Estimator for USA, India, UK, Canada (Route: /tax-estimator)
+- Tax Calendar & Payment Deadlines (Route: /tax-estimator)
+- Custom Categories & Settings (Route: /settings)
+- Financial Health KPIs Dashboard (Route: /dashboard)
+
+Guidelines:
+- Give concise, accurate, and helpful answers (under 4 sentences).
+- Format key terms in **bold** and code in \`code\`.`;
+        }
+
+        let aiAnswer = null;
+        let usedModel = null;
+
+        for (const model of modelsToTry) {
+          try {
+            const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${groqApiKey.trim()}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                model: model,
+                messages: [
+                  { role: 'system', content: systemPrompt },
+                  { role: 'user', content: rawText }
+                ],
+                temperature: 0.7,
+                max_tokens: 500
+              })
+            });
+
+            if (response.ok) {
+              const data = await response.json();
+              aiAnswer = data.choices?.[0]?.message?.content?.trim();
+              if (aiAnswer) {
+                break;
+              }
+            } else {
+              const errText = await response.text();
+              console.warn(`[Chatbot Controller] Groq model ${model} status ${response.status}: ${errText}`);
+            }
+          } catch (mErr) {
+            console.warn(`[Chatbot Controller] Groq model ${model} request error:`, mErr.message);
+          }
+        }
+
+        if (aiAnswer) {
+          return res.json({
+            success: true,
+            answer: aiAnswer,
+            category: bestMatch?.category || 'Personalized AI',
+            actionRoute: (bestMatch && highestScore >= 3) ? bestMatch.actionRoute : null,
+            actionLabel: (bestMatch && highestScore >= 3) ? bestMatch.actionLabel : null,
+            quickPrompts: userContext ? [
+              'What is my total spending this month?',
+              'Am I over budget on any category?',
+              'What is my tax estimate?'
+            ] : (bestMatch?.quickPrompts || [
+              'What is Smart Auto-Categorization?',
+              'How to set monthly budgets?',
+              'How does Tax Estimator work?'
+            ])
+          });
+        }
+      } catch (err) {
+        console.error('[Chatbot Controller] Error with Groq API:', err.message);
+      }
+    }
+
+    // 4. Rule Engine Fallback (Personalized if user context exists)
     if (bestMatch && highestScore >= 3) {
+      let finalAnswer = bestMatch.answer;
+      if (userContext && bestMatch.id === 'greeting') {
+        finalAnswer = `👋 Welcome back, **${userContext.fullName}**! 
+
+I'm **TaxPal Assist**, your personalized financial assistant.
+
+Here is your current snapshot for this month:
+- 💵 **Total Income**: ${userContext.currencySymbol}${userContext.totalIncomeThisMonth}
+- 💸 **Total Expenses**: ${userContext.currencySymbol}${userContext.totalExpenseThisMonth}
+- 🧮 **Tax Estimation**: ${userContext.taxSummary}
+
+How can I help you manage your finances today?`;
+      }
+
       return res.json({
         success: true,
-        answer: bestMatch.answer,
+        answer: finalAnswer,
         category: bestMatch.category,
         actionRoute: bestMatch.actionRoute || null,
         actionLabel: bestMatch.actionLabel || null,
@@ -290,58 +516,11 @@ exports.processChatQuery = async (req, res) => {
       });
     }
 
-    // Fallback to Groq API if GROQ_API_KEY is configured
-    const groqApiKey = process.env.GROQ_API_KEY;
-    if (groqApiKey) {
-      try {
-        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${groqApiKey}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            model: 'openai/gpt-oss-120b',
-            messages: [
-              {
-                role: 'system',
-                content: 'You are TaxPal Assist, a helpful financial assistant for TaxPal. Keep your answers concise, accurate, and under 4 sentences. Format important terms in bold.'
-              },
-              {
-                role: 'user',
-                content: rawText
-              }
-            ],
-            temperature: 0.7
-          })
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          const aiAnswer = data.choices?.[0]?.message?.content;
-          if (aiAnswer) {
-            return res.json({
-              success: true,
-              answer: aiAnswer,
-              quickPrompts: [
-                'What is Smart Auto-Categorization?',
-                'How to set monthly budgets?',
-                'How does Tax Estimator work?'
-              ]
-            });
-          }
-        } else {
-          console.error('Groq API returned error status:', response.status, await response.text());
-        }
-      } catch (err) {
-        console.error('Groq API request failed:', err);
-      }
-    }
-
-    // Fallback response with structured category help menu
+    // 5. Default Fallback response
+    const greetingName = userContext ? ` **${userContext.fullName}**` : '';
     return res.json({
       success: true,
-      answer: `I'm **TaxPal Assist**, specialized in helping you navigate and manage your finances on TaxPal!
+      answer: `I'm **TaxPal Assist**, specialized in helping${greetingName} navigate and manage finances on TaxPal!
 
 I didn't quite catch the exact topic, but here are quick topics I can help you with:
 - 💳 **Transactions & Smart Auto-Categorization**
@@ -351,7 +530,11 @@ I didn't quite catch the exact topic, but here are quick topics I can help you w
 - 🎨 **Custom Category Creation & Hex Colors**`,
       actionRoute: null,
       actionLabel: null,
-      quickPrompts: [
+      quickPrompts: userContext ? [
+        'What is my total spending this month?',
+        'Am I over budget on any category?',
+        'What is my tax estimate?'
+      ] : [
         'What is Smart Auto-Categorization?',
         'How to set category budgets?',
         'How does the Tax Estimator work?',
@@ -366,3 +549,5 @@ I didn't quite catch the exact topic, but here are quick topics I can help you w
     });
   }
 };
+
+
