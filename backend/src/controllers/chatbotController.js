@@ -290,6 +290,54 @@ exports.processChatQuery = async (req, res) => {
       });
     }
 
+    // Fallback to Groq API if GROQ_API_KEY is configured
+    const groqApiKey = process.env.GROQ_API_KEY;
+    if (groqApiKey) {
+      try {
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${groqApiKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            model: 'openai/gpt-oss-120b',
+            messages: [
+              {
+                role: 'system',
+                content: 'You are TaxPal Assist, a helpful financial assistant for TaxPal. Keep your answers concise, accurate, and under 4 sentences. Format important terms in bold.'
+              },
+              {
+                role: 'user',
+                content: rawText
+              }
+            ],
+            temperature: 0.7
+          })
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const aiAnswer = data.choices?.[0]?.message?.content;
+          if (aiAnswer) {
+            return res.json({
+              success: true,
+              answer: aiAnswer,
+              quickPrompts: [
+                'What is Smart Auto-Categorization?',
+                'How to set monthly budgets?',
+                'How does Tax Estimator work?'
+              ]
+            });
+          }
+        } else {
+          console.error('Groq API returned error status:', response.status, await response.text());
+        }
+      } catch (err) {
+        console.error('Groq API request failed:', err);
+      }
+    }
+
     // Fallback response with structured category help menu
     return res.json({
       success: true,
