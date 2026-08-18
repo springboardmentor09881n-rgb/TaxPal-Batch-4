@@ -287,13 +287,21 @@ async function getUserFinancialContext(userId) {
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
 
     // Fetch transactions
-    const transactions = await Transaction.find({ userId }).sort({ date: -1 }).limit(50).lean();
+    const allTransactions = await Transaction.find({ userId }).sort({ date: -1 }).lean();
 
     let totalIncomeThisMonth = 0;
     let totalExpenseThisMonth = 0;
+    let totalIncomeAllTime = 0;
+    let totalExpenseAllTime = 0;
     const categoryTotalsThisMonth = {};
 
-    transactions.forEach(tx => {
+    allTransactions.forEach(tx => {
+      if (tx.type === 'income') {
+        totalIncomeAllTime += tx.amount;
+      } else if (tx.type === 'expense') {
+        totalExpenseAllTime += tx.amount;
+      }
+
       const txDate = new Date(tx.date);
       if (txDate >= startOfMonth && txDate <= endOfMonth) {
         if (tx.type === 'income') {
@@ -305,7 +313,7 @@ async function getUserFinancialContext(userId) {
       }
     });
 
-    const recentTxList = transactions.slice(0, 5).map(tx =>
+    const recentTxList = allTransactions.slice(0, 10).map(tx =>
       `- ${tx.type.toUpperCase()}: ${tx.description} (${currencySymbol}${tx.amount}) [Category: ${tx.category}] on ${new Date(tx.date).toLocaleDateString()}`
     ).join('\n');
 
@@ -325,7 +333,7 @@ async function getUserFinancialContext(userId) {
     let taxSummary = 'No tax estimate created yet.';
     if (latestTaxEstimate) {
       const taxCurrency = getCurrencySymbol(latestTaxEstimate.country || user.country);
-      taxSummary = `Country: ${latestTaxEstimate.country}, Quarter: ${latestTaxEstimate.quarter}, Estimated Tax: ${taxCurrency}${latestTaxEstimate.estimatedTax}, Filing Status: ${latestTaxEstimate.filingStatus}, State: ${latestTaxEstimate.state}, Due Date: ${new Date(latestTaxEstimate.dueDate).toLocaleDateString()}`;
+      taxSummary = `Country: ${latestTaxEstimate.country}, Quarter: ${latestTaxEstimate.quarter}, Estimated Tax: ${taxCurrency}${latestTaxEstimate.estimatedTax}, Gross Income for Quarter: ${taxCurrency}${latestTaxEstimate.grossIncomeForQuarter || 0}, Filing Status: ${latestTaxEstimate.filingStatus}, State: ${latestTaxEstimate.state}, Due Date: ${new Date(latestTaxEstimate.dueDate).toLocaleDateString()}`;
     }
 
     return {
@@ -336,6 +344,8 @@ async function getUserFinancialContext(userId) {
       incomeBracket: user.incomeBracket,
       totalIncomeThisMonth,
       totalExpenseThisMonth,
+      totalIncomeAllTime,
+      totalExpenseAllTime,
       categoryTotalsThisMonth,
       recentTxList: recentTxList || 'No recent transactions recorded.',
       budgetSummaryList: budgetSummaryList || 'No category budget caps configured.',
@@ -385,10 +395,11 @@ exports.processChatQuery = async (req, res) => {
     if (groqApiKey && groqApiKey.trim()) {
       try {
         const modelsToTry = [
-          'openai/gpt-oss-120b',
-          'llama3-70b-8192',
-          'llama3-8b-8192',
-          'mixtral-8x7b-32768'
+          'groq/compound-mini',
+          'groq/compound',
+          'qwen/qwen3.6-27b',
+          'llama-3.3-70b-versatile',
+          'llama-3.1-8b-instant'
         ];
 
         let systemPrompt = `You are TaxPal Assist, an intelligent, friendly financial assistant for TaxPal (a personal finance & advance tax estimation app).`;
@@ -401,7 +412,9 @@ Current Logged-In User Profile & Live Financial Context:
 - Registered Country: ${userContext.country}
 - Currency Symbol: "${userContext.currencySymbol}"
 - Total Income (Current Month): ${userContext.currencySymbol}${userContext.totalIncomeThisMonth}
+- Total Income (All-Time Total Recorded): ${userContext.currencySymbol}${userContext.totalIncomeAllTime}
 - Total Expenses (Current Month): ${userContext.currencySymbol}${userContext.totalExpenseThisMonth}
+- Total Expenses (All-Time Total Recorded): ${userContext.currencySymbol}${userContext.totalExpenseAllTime}
 - Category Monthly Budgets Progress:
 ${userContext.budgetSummaryList}
 - Tax Estimation Data: ${userContext.taxSummary}
