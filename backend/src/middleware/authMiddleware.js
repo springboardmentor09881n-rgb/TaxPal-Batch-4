@@ -1,6 +1,6 @@
 const jwt = require('jsonwebtoken');
 
-module.exports = function (req, res, next) {
+function auth(req, res, next) {
   // Get token from header
   const token = req.header('Authorization');
 
@@ -22,4 +22,23 @@ module.exports = function (req, res, next) {
   } catch (err) {
     res.status(401).json({ message: 'Token is not valid' });
   }
+}
+
+auth.optionalAuth = function (req, res, next) {
+  const token = req.header('Authorization');
+  if (token) {
+    try {
+      const decodedToken = token.split(' ')[1];
+      if (decodedToken) {
+        const decoded = jwt.verify(decodedToken, process.env.JWT_SECRET);
+        req.user = decoded.user;
+      }
+    } catch (err) {
+      // Ignore invalid token and continue as guest
+    }
+  }
+  next();
 };
+
+module.exports = auth;
+
