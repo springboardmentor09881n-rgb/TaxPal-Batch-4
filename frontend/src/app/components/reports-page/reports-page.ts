@@ -118,7 +118,7 @@ const REPORT_TYPE_LABEL: Record<ReportType, string> = {
                   <td>
                     <div class="report-title-cell">
                       <svg class="report-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        @switch (report.type) {
+                        @switch (getReportType(report)) {
                           @case ('income_statement') {
                             <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C6.5 20.496 5.996 21 5.375 21h-2.25A1.125 1.125 0 0 1 2 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
                           }
@@ -173,7 +173,7 @@ const REPORT_TYPE_LABEL: Record<ReportType, string> = {
       </div>
 
       <!-- 3. Report Preview Card (Stacked Below) -->
-      <div class="card preview-card-full">
+      <div class="card preview-card-full" id="report-preview-section">
 
         <!-- Default Empty State -->
         @if (!selectedReport()) {
@@ -194,7 +194,7 @@ const REPORT_TYPE_LABEL: Record<ReportType, string> = {
             <div class="preview-actions-header">
               <div class="preview-report-title">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
-                  @switch (r.type) {
+                  @switch (getReportType(r)) {
                     @case ('income_statement') {
                       <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C6.5 20.496 5.996 21 5.375 21h-2.25A1.125 1.125 0 0 1 2 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
                     }
@@ -249,7 +249,7 @@ const REPORT_TYPE_LABEL: Record<ReportType, string> = {
                   <div class="sheet-body">
 
                     <!-- Income Statement -->
-                    @if (r.type === 'income_statement') {
+                    @if (getReportType(r) === 'income_statement') {
                       <div class="report-content-type">
                         <div class="sheet-metrics-row">
                           <div class="sheet-metric-card">
@@ -296,11 +296,39 @@ const REPORT_TYPE_LABEL: Record<ReportType, string> = {
                             </table>
                           </div>
                         </div>
+
+                        <div class="sheet-section-wrapper" style="margin-top: 1.5rem;">
+                          <h3 class="sheet-section-title">Transactions for Period</h3>
+                          <table class="sheet-data-table">
+                            <thead>
+                              <tr>
+                                <th>Date</th>
+                                <th>Category</th>
+                                <th>Description</th>
+                                <th class="text-right">Amount</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              @for (t of r.data.transactions; track t.date + t.description + t.amount) {
+                                <tr>
+                                  <td>{{ t.date }}</td>
+                                  <td>{{ t.category }}</td>
+                                  <td>{{ t.description }}</td>
+                                  <td class="text-right font-medium" [class.text-green]="t.type === 'income'" [class.text-red]="t.type === 'expense'">
+                                    {{ t.type === 'income' ? '+' : '-' }}{{ currencySymbol() }}{{ t.amount | number:'1.2-2' }}
+                                  </td>
+                                </tr>
+                              } @empty {
+                                <tr><td colspan="4" class="empty-data-row">No transactions found for this period</td></tr>
+                              }
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
                     }
 
                     <!-- Tax Summary -->
-                    @if (r.type === 'tax_summary') {
+                    @if (getReportType(r) === 'tax_summary') {
                       <div class="report-content-type">
                         <div class="sheet-metrics-row-4">
                           <div class="sheet-metric-card">
@@ -350,7 +378,7 @@ const REPORT_TYPE_LABEL: Record<ReportType, string> = {
                     }
 
                     <!-- Budget Performance -->
-                    @if (r.type === 'budget_performance') {
+                    @if (getReportType(r) === 'budget_performance') {
                       <div class="report-content-type">
                         <div class="sheet-metrics-row">
                           <div class="sheet-metric-card">
@@ -1174,6 +1202,14 @@ export class ReportsComponent {
     return getCurrencySymbol(this.dataService.currentUser()?.country);
   });
 
+  getReportType(r: GeneratedReport | any): ReportType {
+    if (r && r.type) return r.type;
+    const rawType = (r?.reportType || '').toLowerCase();
+    if (rawType.includes('tax')) return 'tax_summary';
+    if (rawType.includes('budget')) return 'budget_performance';
+    return 'income_statement';
+  }
+
   onReportTypeChange(type: ReportType): void {
     this.reportType.set(type);
     if (type === 'tax_summary' && NON_QUARTER_PERIODS.includes(this.period())) {
@@ -1192,7 +1228,7 @@ export class ReportsComponent {
     this.reportService.generateReport(this.reportType(), this.period(), this.format()).subscribe({
       next: (report) => {
         if (report) {
-          this.selectedReport.set(report);
+          this.onPreview(report);
         }
       }
     });
@@ -1206,6 +1242,12 @@ export class ReportsComponent {
 
   onPreview(report: GeneratedReport): void {
     this.selectedReport.set(report);
+    setTimeout(() => {
+      const element = document.getElementById('report-preview-section');
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 50);
   }
 
   onDownload(report: GeneratedReport): void {
@@ -1235,15 +1277,20 @@ export class ReportsComponent {
     const allEstimates = this.dataService.estimates();
     const matchedEst = allEstimates.find(e => (e.quarter || '').toLowerCase() === (r.period || '').toLowerCase() || r.periodLabel.includes(e.quarter || ''));
 
-    const businessExp = matchedEst ? (matchedEst.businessExpenses || 0) : (data.totalExpenses || 0);
-    const retirement = matchedEst ? (matchedEst.retirementContributions || 0) : 0;
-    const healthIns = matchedEst ? (matchedEst.healthInsurancePremiums || 0) : 0;
-    const homeOff = matchedEst ? (matchedEst.homeOfficeDeductions || 0) : 0;
-    const totalDeductions = businessExp + retirement + healthIns + homeOff;
+    const serverDeductions = data.deductionsBreakdown;
+    const serverTaxCalcs = data.taxCalculations;
 
-    const estTax = data.estimatedTax ?? (matchedEst ? matchedEst.estimatedTax : Math.max(0, net) * 0.25);
-    const fedTax = estTax * 0.7;
-    const stateTax = estTax * 0.3;
+    const businessExp = serverDeductions ? serverDeductions.businessExpenses : (matchedEst ? (matchedEst.businessExpenses || 0) : (data.totalExpenses || 0));
+    const retirement = serverDeductions ? serverDeductions.retirement : (matchedEst ? (matchedEst.retirementContributions || 0) : 0);
+    const healthIns = serverDeductions ? serverDeductions.healthInsurance : (matchedEst ? (matchedEst.healthInsurancePremiums || 0) : 0);
+    const homeOff = serverDeductions ? serverDeductions.homeOffice : (matchedEst ? (matchedEst.homeOfficeDeductions || 0) : 0);
+    const totalDeductions = serverDeductions?.totalDeductions ?? (businessExp + retirement + healthIns + homeOff);
+
+    const estTax = data.estimatedTax ?? (serverTaxCalcs?.estimatedTax ?? (matchedEst ? matchedEst.estimatedTax : Math.max(0, net) * 0.25));
+    const fedTax = serverTaxCalcs ? serverTaxCalcs.nationalTax : estTax * 0.7;
+    const stateTax = serverTaxCalcs ? serverTaxCalcs.stateTax : estTax * 0.3;
+    const effRate = serverTaxCalcs ? serverTaxCalcs.effectiveTaxRate : ((data.totalIncome || 0) > 0 ? (estTax / data.totalIncome) * 100 : 0);
+    const dueDateStr = serverTaxCalcs ? serverTaxCalcs.dueDate : (matchedEst?.dueDate ? new Date(matchedEst.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Quarterly Due Date');
 
     const budgetRows = data.budgetComparison ?? [];
     const totalLimit = budgetRows.reduce((s, b) => s + b.budgeted, 0);
@@ -1279,8 +1326,8 @@ export class ReportsComponent {
       taxCalculations: {
         nationalTax: fedTax,
         stateTax: stateTax,
-        effectiveTaxRate: (data.totalIncome || 0) > 0 ? (estTax / data.totalIncome) * 100 : 0,
-        dueDate: matchedEst?.dueDate ? new Date(matchedEst.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Quarterly Due Date'
+        effectiveTaxRate: effRate,
+        dueDate: dueDateStr
       },
       categoryPerformance: budgetRows.map(b => ({
         categoryName: b.category,

@@ -1,6 +1,6 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, tap, catchError, of } from 'rxjs';
+import { Observable, tap, map, catchError, of } from 'rxjs';
 import { DataService } from './data.service';
 import { Transaction } from '../models';
 import { environment } from '../../environments/environment';
@@ -43,6 +43,23 @@ export interface GeneratedReport {
     budgetComparison?: BudgetComparisonRow[];
     estimatedTax?: number;
     estimatedTaxNote?: string;
+    deductionsBreakdown?: {
+      businessExpenses: number;
+      retirement: number;
+      healthInsurance: number;
+      homeOffice: number;
+      totalDeductions?: number;
+    };
+    taxCalculations?: {
+      grossIncome?: number;
+      totalDeductions?: number;
+      taxableIncome?: number;
+      estimatedTax?: number;
+      nationalTax: number;
+      stateTax: number;
+      effectiveTaxRate: number;
+      dueDate: string;
+    };
   };
 }
 
@@ -147,11 +164,13 @@ export class ReportService {
     };
 
     return this.http.post<any>(`${this.apiUrl}/generate`, payload, { headers }).pipe(
-      tap((savedServerReport) => {
+      map((savedServerReport) => {
         if (savedServerReport) {
           const mapped = this.mapServerReport(savedServerReport);
           this.reports.update(current => [mapped, ...current.filter(r => r.id !== mapped.id)]);
+          return mapped;
         }
+        return null;
       }),
       catchError((err) => {
         console.error('Error generating report on server:', err);
@@ -164,12 +183,12 @@ export class ReportService {
     const headers = this.getAuthHeaders();
     const reportId = report._id || report.id;
 
-    this.http.get(`${this.apiUrl}/download/${encodeURIComponent(reportId)}`, {
+    this.http.get(`${this.apiUrl}/download/${encodeURIComponent(reportId)}?t=${Date.now()}`, {
       headers,
       responseType: 'blob'
     }).subscribe({
       next: (blob) => {
-        const ext = report.format === 'CSV' ? 'csv' : 'pdf';
+        const ext = (report.format || '').toUpperCase() === 'CSV' ? 'csv' : 'pdf';
         const filename = `${this.slugify(report.name)}.${ext}`;
         this.triggerDownload(blob, filename);
       },
