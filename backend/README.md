@@ -1,6 +1,15 @@
 # ⚙️ TaxPal - Backend REST API & Server Documentation
 
-The **TaxPal Backend REST API** is a high-performance Express.js server powering the **TaxPal** financial and tax management platform. It handles user authentication, session security, database operations, transaction categorization, category budget tracking, multi-country advance tax calculations, interactive tax calendar notifications, floating AI chatbot assist responses, and dynamic report generation (PDF & CSV).
+The **TaxPal Backend REST API** is an Express.js server powering the **TaxPal** financial and tax management platform. It handles user authentication, session security, database operations, transaction categorization, category budget tracking, multi-country advance tax calculations, interactive tax calendar notifications, floating AI chatbot assist responses, and dynamic report generation (PDF & CSV).
+
+---
+
+## 🚀 Live Production API Endpoint & Deployment Setup
+
+- ⚡ **Live API Base URL**: `https://taxpal-f8g1.onrender.com/api`
+- 🖥️ **Hosting Provider**: **Render Web Service**
+- 🗄️ **Database Cluster**: **MongoDB Atlas** (`taxpal.m7jzazy.mongodb.net`)
+- 🔒 **CORS Allowed Origins**: `https://taxpal-blue.vercel.app`, `http://localhost:4200`
 
 ---
 
@@ -9,15 +18,16 @@ The **TaxPal Backend REST API** is a high-performance Express.js server powering
 | Component | Library / Framework | Version | Purpose |
 |---|---|---|---|
 | **Runtime Environment** | Node.js | `v18.x` / `v20.x` | Asynchronous JavaScript backend runtime |
-| **Web Framework** | Express.js | `^5.0.0` | Middleware chaining, RESTful API routing, & HTTP utilities |
-| **Database ODM** | Mongoose / MongoDB | `^8.10.0` | Object Data Modeling schema definitions & MongoDB driver |
-| **Authentication** | JSON Web Tokens (`jsonwebtoken`) | `^9.0.2` | Stateless bearer token authentication & payload signing |
-| **Password Security** | Bcrypt (`bcryptjs`) | `^3.0.0` | Password hashing algorithm with salt rounds |
-| **Email Transport** | Nodemailer | `^6.10.0` | SMTP service integration for password reset emails |
-| **PDF Generation** | PDFKit | `^0.16.0` | Dynamic document building for downloadable financial reports |
-| **CSV Export** | json2csv | `^6.0.0-alpha.5` | JSON data transformer to CSV structured format |
-| **CORS Middleware** | cors | `^2.8.5` | Cross-Origin Resource Sharing handling for Angular client |
-| **Environment Mgmt** | dotenv | `^16.4.7` | `.env` environment variable loader |
+| **Web Framework** | Express.js | `^5.2.1` | Middleware chaining, RESTful API routing, & HTTP utilities |
+| **Database ODM** | Mongoose / MongoDB | `^8.0.0` | Object Data Modeling schema definitions & MongoDB driver |
+| **Authentication** | JSON Web Tokens (`jsonwebtoken`) | `^9.0.3` | Stateless bearer token authentication & payload signing |
+| **Password Security** | Bcrypt (`bcrypt`) | `^6.0.0` | Password hashing algorithm with salt rounds |
+| **Rate Limiting** | Express Rate Limit (`express-rate-limit`) | `^8.6.2` | Brute-force protection & API request rate limiting |
+| **Email Transport** | Nodemailer | `^9.0.3` | SMTP service integration for password reset emails |
+| **PDF Generation** | PDFKit | `^0.19.1` | Dynamic document building for downloadable financial reports |
+| **CSV Export** | json2csv | `^6.0.0-alpha.2` | JSON data transformer to CSV structured format |
+| **CORS Middleware** | cors | `^2.8.6` | Cross-Origin Resource Sharing handling for Angular client |
+| **Environment Mgmt** | dotenv | `^17.4.2` | `.env` environment variable loader |
 
 ---
 
@@ -57,24 +67,24 @@ backend/
 
 ## 🔑 Environment Variables Setup
 
-Create a `.env` file in the root of the `backend/` directory based on the `.env.example` template:
+Create a `.env` file in the `backend/` directory based on the `.env.example` template:
 
 ```env
 PORT=5000
 JWT_SECRET=your_super_secret_jwt_key
-MONGODB_URI=mongodb://localhost:27017/taxpal
+MONGODB_URI=mongodb+srv://user:password@taxpal.m7jzazy.mongodb.net/test
 DB_NAME=taxpal
 DB_HOST=localhost
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_USER=your_email@gmail.com
 SMTP_PASSWORD=your_email_app_password
-FRONTEND_URL=http://localhost:4200
+FRONTEND_URL=https://taxpal-blue.vercel.app
 ```
 
 ### Environment Glossary
 
-| Variable | Required | Default | Description |
+| Variable | Required | Default / Example | Description |
 |---|---|---|---|
 | `PORT` | No | `5000` | Local port on which the Express server listens |
 | `JWT_SECRET` | **Yes** | — | Secret key used to sign and verify JWT authentication tokens |
@@ -85,7 +95,7 @@ FRONTEND_URL=http://localhost:4200
 | `SMTP_PORT` | No | `587` | SMTP port (`587` for TLS, `465` for SSL) |
 | `SMTP_USER` | No | — | Sender email address for SMTP authentication |
 | `SMTP_PASSWORD` | No | — | Sender email password or Gmail App Password |
-| `FRONTEND_URL` | No | `http://localhost:4200` | Client origin URL for CORS policy & email reset links |
+| `FRONTEND_URL` | No | `https://taxpal-blue.vercel.app` | Client origin URL for CORS policy & email reset links |
 
 ---
 
@@ -286,6 +296,20 @@ Tax liability is calculated by annualizing quarterly net income ($Net \times 4$)
 ### 3. TaxPal Assist Rule-Based Engine (`chatbotController.js`)
 - Features a zero-dependency, local regex and keyword scoring algorithm that matches user input against curated knowledge items (Transactions, Auto-Categorization, Budgets, Tax Estimator, Tax Calendar, Profile Settings).
 - Returns structured responses complete with markdown formatting, contextual action route links (`actionRoute`), and relevant follow-up prompts (`quickPrompts`).
+
+---
+
+## 🚀 Production Deployment on Render
+
+1. Create a **Web Service** on [Render](https://render.com).
+2. Connect your repository and select root folder `backend`.
+3. Build Command: `npm install`
+4. Start Command: `npm start`
+5. Configure Environment Variables in Render Dashboard:
+   - `JWT_SECRET`: `<production_jwt_secret>`
+   - `MONGODB_URI`: `mongodb+srv://<username>:<password>@taxpal.m7jzazy.mongodb.net/test`
+   - `FRONTEND_URL`: `https://taxpal-blue.vercel.app`
+   - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`
 
 ---
 

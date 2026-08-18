@@ -86,6 +86,9 @@ export interface ChatMessage {
   category?: string;
   actionRoute?: string;
   actionLabel?: string;
+  downloadUrl?: string;
+  downloadLabel?: string;
+  downloadFilename?: string;
   quickPrompts?: string[];
 }
 
@@ -100,6 +103,9 @@ export interface ChatbotResponse {
   category?: string;
   actionRoute?: string;
   actionLabel?: string;
+  downloadUrl?: string;
+  downloadLabel?: string;
+  downloadFilename?: string;
   quickPrompts?: string[];
 }
 

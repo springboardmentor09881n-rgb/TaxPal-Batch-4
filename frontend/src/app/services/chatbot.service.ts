@@ -92,6 +92,9 @@ export class ChatbotService {
         category: res.category,
         actionRoute: res.actionRoute,
         actionLabel: res.actionLabel,
+        downloadUrl: res.downloadUrl,
+        downloadLabel: res.downloadLabel,
+        downloadFilename: res.downloadFilename,
         quickPrompts: res.quickPrompts || []
       };
 

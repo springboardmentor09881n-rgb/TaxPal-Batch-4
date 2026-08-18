@@ -754,3 +754,7 @@ exports.deleteReport = async (req, res) => {
     res.status(500).json({ message: 'Server error deleting report', error: error.message });
   }
 };
+
+exports.getDatesForPeriod = getDatesForPeriod;
+exports.calculateReportSnapshot = calculateReportSnapshot;
+

@@ -7,6 +7,8 @@ const User = require('../models/User.model');
 const Transaction = require('../models/Transaction.model');
 const Budget = require('../models/budgets.model');
 const TaxEstimate = require('../models/taxEstimates.model');
+const Report = require('../models/report.model');
+const { getDatesForPeriod, calculateReportSnapshot } = require('./reportController');
 
 
 const KNOWLEDGE_BASE = [
@@ -208,6 +210,23 @@ Your Dashboard displays real-time key performance indicators:
       'How to update user profile?',
       'How to add custom categories?'
     ]
+  },
+  {
+    id: 'reports_generation',
+    category: 'Reports',
+    keywords: ['report', 'reports', 'tax summary report', 'download report', 'export pdf', 'csv', 'generate report', 'statement', 'download tax summary'],
+    patterns: [/generate.*report/i, /tax.*summary.*report/i, /download.*report/i, /export.*pdf/i, /export.*csv/i],
+    answer: `📊 **Generating Financial & Tax Summary Reports**
+
+You can generate and download official PDF or CSV financial reports on TaxPal:
+1. Ask me directly: *"Generate tax summary report PDF"* or *"Download income statement CSV"*.
+2. Or click **Go to Reports** to view all generated report history.`,
+    actionRoute: '/reports',
+    actionLabel: 'Go to Reports',
+    quickPrompts: [
+      'Generate tax summary report PDF',
+      'How does Tax Estimator work?'
+    ]
   }
 ];
 
@@ -358,6 +377,241 @@ async function getUserFinancialContext(userId) {
 }
 
 /**
+<<<<<<< HEAD
+=======
+ * Handles Direct Chat Commands for Budgets, Transactions, and Reports
+ */
+async function processDirectChatActions(rawText, userId, userContext) {
+  if (!userId) return null;
+  const text = rawText.trim();
+  const lower = text.toLowerCase();
+  const currencySymbol = userContext?.currencySymbol || '$';
+
+  // -------------------------------------------------------------
+  // 1. BUDGET ACTIONS (Create/Update or Delete Budget)
+  // -------------------------------------------------------------
+
+  // Delete budget: e.g. "delete budget for Food", "remove food budget"
+  if (lower.includes('budget') && (lower.includes('delete') || lower.includes('remove') || lower.includes('clear'))) {
+    const match = text.match(/(?:delete|remove|clear)\s*(?:a\s*)?budget(?:\s*for|\s*category)?\s*([a-zA-Z0-9\s]+)/i) ||
+      text.match(/(?:delete|remove|clear)\s*([a-zA-Z0-9\s]+)\s*budget/i);
+    if (match && match[1]) {
+      const categoryName = match[1].trim();
+      const deleted = await Budget.findOneAndDelete({
+        userId,
+        category: new RegExp(`^${categoryName}$`, 'i')
+      });
+      if (deleted) {
+        return {
+          success: true,
+          answer: `🗑️ **Budget Removed**: Successfully deleted monthly budget cap for **${deleted.category}**!`,
+          category: 'Budgets',
+          actionRoute: '/budgets',
+          actionLabel: 'View Budgets',
+          quickPrompts: ['Am I over budget on any category?', 'What is my total spending this month?']
+        };
+      } else {
+        return {
+          success: true,
+          answer: `⚠️ Could not find an active budget for category **"${categoryName}"** to delete.`,
+          category: 'Budgets',
+          actionRoute: '/budgets',
+          actionLabel: 'View Budgets'
+        };
+      }
+    }
+  }
+
+  // Create / Update budget: e.g. "set budget of $500 for Food", "create $300 budget for Travel", "set Food budget to 500"
+  if (lower.includes('budget') && (lower.includes('set') || lower.includes('create') || lower.includes('add') || lower.includes('cap'))) {
+    let categoryName = null;
+    let amount = null;
+
+    const matchA = text.match(/(?:set|create|add)\s*(?:a\s*)?budget(?:\s*cap)?\s*(?:of\s*|to\s*)?\$?(\d+(?:\.\d+)?)\s*(?:for\s*|under\s*|in\s*|category\s*)?([a-zA-Z0-9\s]+)/i);
+    const matchB = text.match(/(?:set|create|add)\s*([a-zA-Z0-9\s]+)\s*budget\s*(?:to|of|at)?\s*\$?(\d+(?:\.\d+)?)/i);
+
+    if (matchA && matchA[1] && matchA[2]) {
+      amount = parseFloat(matchA[1]);
+      categoryName = matchA[2].trim();
+    } else if (matchB && matchB[1] && matchB[2]) {
+      categoryName = matchB[1].trim();
+      amount = parseFloat(matchB[2]);
+    }
+
+    if (categoryName && !isNaN(amount) && amount > 0) {
+      categoryName = categoryName.charAt(0).toUpperCase() + categoryName.slice(1);
+      const now = new Date();
+      const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+      let budget = await Budget.findOne({
+        userId,
+        category: new RegExp(`^${categoryName}$`, 'i'),
+        month: currentMonth
+      });
+
+      if (budget) {
+        budget.budget_amount = amount;
+        await budget.save();
+      } else {
+        budget = await Budget.create({
+          userId,
+          category: categoryName,
+          budget_amount: amount,
+          month: currentMonth,
+          description: 'Created via TaxPal Assist Chatbot'
+        });
+      }
+
+      return {
+        success: true,
+        answer: `🎯 **Budget Configured**: Successfully set a monthly budget cap of **${currencySymbol}${amount}** for **${categoryName}** (${currentMonth})!`,
+        category: 'Budgets',
+        actionRoute: '/budgets',
+        actionLabel: 'View Budgets',
+        quickPrompts: ['Am I over budget on any category?', 'What is my total spending this month?']
+      };
+    }
+  }
+
+  // -------------------------------------------------------------
+  // 2. TRANSACTION ACTIONS (Record/Create or Delete Transaction)
+  // -------------------------------------------------------------
+
+  // Delete transaction: e.g. "delete transaction Swiggy", "remove expense Uber"
+  if ((lower.includes('transaction') || lower.includes('expense') || lower.includes('income')) && (lower.includes('delete') || lower.includes('remove'))) {
+    const match = text.match(/(?:delete|remove)\s*(?:transaction|expense|income)?\s*(?:for\s*)?([a-zA-Z0-9\s]+)/i);
+    if (match && match[1]) {
+      const searchTerm = match[1].trim();
+      const deleted = await Transaction.findOneAndDelete({
+        userId,
+        $or: [
+          { description: new RegExp(searchTerm, 'i') },
+          { category: new RegExp(searchTerm, 'i') }
+        ]
+      });
+
+      if (deleted) {
+        return {
+          success: true,
+          answer: `🗑️ **Transaction Removed**: Deleted ${deleted.type.toUpperCase()} entry **"${deleted.description}"** (${currencySymbol}${deleted.amount})!`,
+          category: 'Transactions',
+          actionRoute: '/transactions',
+          actionLabel: 'View Transactions',
+          quickPrompts: ['What is my total income this month?', 'What is my total spending this month?']
+        };
+      } else {
+        return {
+          success: true,
+          answer: `⚠️ Could not find a recent transaction matching **"${searchTerm}"** to delete.`,
+          category: 'Transactions',
+          actionRoute: '/transactions',
+          actionLabel: 'View Transactions'
+        };
+      }
+    }
+  }
+
+  // Create / Record Transaction: e.g. "add expense $45 for Swiggy under Food", "record income $2000 for Salary"
+  if (lower.includes('add') || lower.includes('record') || lower.includes('log') || lower.includes('spent') || lower.includes('paid') || lower.includes('earned') || lower.includes('received')) {
+    const isIncome = lower.includes('income') || lower.includes('earned') || lower.includes('received') || lower.includes('salary');
+    const type = isIncome ? 'income' : 'expense';
+
+    const match = text.match(/(?:add|record|log|spent|paid|received|earned)\s*(?:an?\s*)?(?:expense|income)?\s*(?:of\s*|at\s*)?\$?(\d+(?:\.\d+)?)\s*(?:for\s*|on\s*|under\s*|in\s*)?([a-zA-Z0-9\s\-_]+)?/i);
+
+    if (match && match[1]) {
+      const amount = parseFloat(match[1]);
+      let descAndCat = (match[2] || '').trim();
+
+      let categoryName = isIncome ? 'Salary' : 'General';
+      let descriptionText = descAndCat || `${type.toUpperCase()} Entry`;
+
+      if (descAndCat) {
+        if (descAndCat.toLowerCase().includes('food') || descAndCat.toLowerCase().includes('swiggy') || descAndCat.toLowerCase().includes('zomato')) {
+          categoryName = 'Food';
+        } else if (descAndCat.toLowerCase().includes('uber') || descAndCat.toLowerCase().includes('ola') || descAndCat.toLowerCase().includes('travel') || descAndCat.toLowerCase().includes('fuel')) {
+          categoryName = 'Transportation';
+        } else if (descAndCat.toLowerCase().includes('rent') || descAndCat.toLowerCase().includes('house')) {
+          categoryName = 'Housing';
+        } else if (descAndCat.toLowerCase().includes('shopping') || descAndCat.toLowerCase().includes('amazon')) {
+          categoryName = 'Shopping';
+        } else {
+          categoryName = isIncome ? 'Salary' : 'General';
+        }
+      }
+
+      const newTx = await Transaction.create({
+        userId,
+        type,
+        amount,
+        category: categoryName,
+        description: descriptionText,
+        date: new Date()
+      });
+
+      return {
+        success: true,
+        answer: `💳 **Transaction Recorded**: Added ${type.toUpperCase()} entry **"${newTx.description}"** of **${currencySymbol}${amount}** under category **${categoryName}**!`,
+        category: 'Transactions',
+        actionRoute: '/transactions',
+        actionLabel: 'View Transactions',
+        quickPrompts: ['What is my total income this month?', 'What is my total spending this month?']
+      };
+    }
+  }
+
+  // -------------------------------------------------------------
+  // 3. REPORT ACTIONS (Generate Report & Provide Direct Download Button)
+  // -------------------------------------------------------------
+
+  if (lower.includes('report') && (lower.includes('generate') || lower.includes('download') || lower.includes('export') || lower.includes('create') || lower.includes('tax summary') || lower.includes('pdf') || lower.includes('csv'))) {
+    let reportType = 'Income Statement';
+    if (lower.includes('tax')) reportType = 'Tax Summary';
+    else if (lower.includes('budget')) reportType = 'Budget Performance';
+
+    let format = lower.includes('csv') ? 'CSV' : 'PDF';
+    let period = 'Current Month';
+    if (lower.includes('q1') || lower.includes('quarter 1')) period = 'Quarter 1';
+    else if (lower.includes('q2') || lower.includes('quarter 2')) period = 'Quarter 2';
+    else if (lower.includes('q3') || lower.includes('quarter 3')) period = 'Quarter 3';
+    else if (lower.includes('q4') || lower.includes('quarter 4')) period = 'Quarter 4';
+    else if (lower.includes('year') || lower.includes('ytd')) period = 'Current Year';
+    else if (lower.includes('last month')) period = 'Last Month';
+
+    const { startDate, endDate } = getDatesForPeriod(period);
+    const dataSnapshot = await calculateReportSnapshot(userId, startDate, endDate, reportType, period);
+
+    const report = await Report.create({
+      userId,
+      reportType,
+      period,
+      format,
+      name: `${reportType} (${period})`,
+      startDate,
+      endDate,
+      data: dataSnapshot
+    });
+
+    const downloadUrl = `/api/reports/download/${report._id}`;
+    const filename = `TaxPal-${reportType.replace(/\s+/g, '-')}-${format}.${format.toLowerCase()}`;
+
+    return {
+      success: true,
+      answer: `📄 **Generated ${reportType} Report (${format})**\n\nYour **${reportType}** statement for **${period}** has been compiled successfully. Click the button below to download the ${format} file directly to your device!`,
+      category: 'Reports',
+      actionRoute: '/reports',
+      actionLabel: 'View All Reports',
+      downloadUrl: downloadUrl,
+      downloadLabel: `Download ${reportType} (${format})`,
+      downloadFilename: filename,
+      quickPrompts: ['How does Tax Estimator work?', 'What is my total spending this month?']
+    };
+  }
+
+  return null;
+}
+
+/**
+>>>>>>> main
  * Controller endpoint: POST /api/chatbot/query
  */
 exports.processChatQuery = async (req, res) => {
@@ -389,6 +643,14 @@ exports.processChatQuery = async (req, res) => {
     // 2. Fetch User Financial Context if Authenticated
     const userId = req.user?.id || req.user?._id;
     const userContext = await getUserFinancialContext(userId);
+
+    // 2.5 Try Direct Chat Commands (Budgets, Transactions, Reports)
+    if (userId) {
+      const actionResult = await processDirectChatActions(rawText, userId, userContext);
+      if (actionResult) {
+        return res.json(actionResult);
+      }
+    }
 
     // 3. Try Personalized Groq AI Engine First (If GROQ_API_KEY is available)
     const groqApiKey = process.env.GROQ_API_KEY;
@@ -562,5 +824,3 @@ I didn't quite catch the exact topic, but here are quick topics I can help you w
     });
   }
 };
-
-

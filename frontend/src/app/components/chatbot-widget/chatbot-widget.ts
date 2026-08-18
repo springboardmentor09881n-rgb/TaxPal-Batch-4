@@ -2,7 +2,9 @@ import { Component, ElementRef, ViewChild, inject, AfterViewChecked } from '@ang
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
+import { HttpClient } from '@angular/common/http';
 import { ChatbotService } from '../../services/chatbot.service';
+import { environment } from '../../../environments/environment';
 
 @Component({
   selector: 'app-chatbot-widget',
@@ -128,6 +130,22 @@ import { ChatbotService } from '../../services/chatbot.service';
                   <!-- Formatted HTML text content -->
                   <div [innerHTML]="formatMessage(msg.text)"></div>
 
+                  <!-- Direct File Download Button -->
+                  @if (msg.downloadUrl) {
+                    <div class="mt-3 pt-2.5 border-t border-slate-700/60 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        (click)="downloadReportFile(msg.downloadUrl, msg.downloadFilename)"
+                        class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md transition-all cursor-pointer hover:scale-105 active:scale-95"
+                      >
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                        </svg>
+                        <span>{{ msg.downloadLabel || 'Download Generated Report' }}</span>
+                      </button>
+                    </div>
+                  }
+
                   <!-- Direct Router Navigation Action Button -->
                   @if (msg.actionRoute && msg.actionLabel) {
                     <div class="mt-3 pt-2.5 border-t border-slate-700/60">
@@ -209,6 +227,7 @@ export class ChatbotWidgetComponent implements AfterViewChecked {
 
   protected readonly chatbotService = inject(ChatbotService);
   private readonly router = inject(Router);
+  private readonly http = inject(HttpClient);
 
   userQuery = '';
 
@@ -231,6 +250,40 @@ export class ChatbotWidgetComponent implements AfterViewChecked {
     if (route) {
       this.router.navigate([route]);
     }
+  }
+
+  downloadReportFile(downloadUrl?: string, filename?: string): void {
+    if (!downloadUrl) return;
+
+    const fullUrl = downloadUrl.startsWith('http')
+      ? downloadUrl
+      : `${environment.apiUrl.replace(/\/reports$/, '')}${downloadUrl.startsWith('/') ? '' : '/'}${downloadUrl}`;
+
+    // Normalize API URL path if environment.apiUrl is base URL
+    const targetUrl = downloadUrl.startsWith('/api') 
+      ? `${environment.apiUrl.split('/api')[0]}${downloadUrl}`
+      : fullUrl;
+
+    const token = sessionStorage.getItem('tp_token');
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    this.http.get(targetUrl, { headers, responseType: 'blob' }).subscribe({
+      next: (blob) => {
+        const outName = filename || 'TaxPal-Generated-Report.pdf';
+        const blobUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = outName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(blobUrl);
+      },
+      error: (err) => console.error('Error downloading report from chatbot:', err)
+    });
   }
 
   formatMessage(text: string): string {

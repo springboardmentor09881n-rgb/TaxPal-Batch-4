@@ -1,8 +1,18 @@
 # 💰 TaxPal - Full-Stack Financial & Tax Management Application
 
-**TaxPal** is a state-of-the-art full-stack web platform designed for personal finance tracking, category budgeting, smart merchant transaction auto-categorization, multi-country advance tax estimation, interactive tax calendar management, AI chatbot assistance, and downloadable financial reporting. 
+**TaxPal** is a state-of-the-art full-stack web application designed for personal finance tracking, category budgeting, smart merchant transaction auto-categorization, multi-country advance tax estimation, interactive tax calendar management, AI chatbot assistance, and downloadable financial reporting.
 
 Developed as a flagship internship project by **Batch 4**, TaxPal empowers individuals, freelancers, and small business owners to seamlessly manage their money, track monthly expenses against budget limits, stay tax-ready year-round across international jurisdictions, and generate audit-ready financial statements in PDF or CSV format.
+
+---
+
+## 🚀 Live Production Deployment
+
+TaxPal is fully deployed and accessible live online:
+
+- 🌐 **Live Web Application (Frontend)**: [https://taxpal-blue.vercel.app](https://taxpal-blue.vercel.app) *(Hosted on Vercel)*
+- ⚡ **Live REST API (Backend)**: [https://taxpal-f8g1.onrender.com/api](https://taxpal-f8g1.onrender.com/api) *(Hosted on Render Web Service)*
+- 🗄️ **Cloud Database**: **MongoDB Atlas Cluster** (`taxpal.m7jzazy.mongodb.net`)
 
 ---
 
@@ -69,24 +79,59 @@ Developed as a flagship internship project by **Batch 4**, TaxPal empowers indiv
 
 ---
 
-## 🚀 Tech Stack Overview
+## 🛠️ Tech Stack Overview
 
 ### Frontend Client
-- **Framework**: Angular (v21.1+, Standalone Components Architecture)
+- **Framework**: Angular (`v21.2.0`, Standalone Components Architecture)
 - **State Management**: Angular Signals (`signal`, `computed`, `effect`), RxJS State Streams
-- **Styling**: TailwindCSS v4, PostCSS, Custom Utility CSS
-- **Language**: TypeScript (v5.9+)
+- **Styling**: TailwindCSS (`v4.1.12`), PostCSS (`v8.5.3`), Custom Utility CSS
+- **Language**: TypeScript (`v5.9.2`)
 - **HTTP & Routing**: Angular `HttpClient`, HTTP Interceptors, Angular Router, Auth Guards
-- **Testing & Tooling**: Vitest, Angular CLI
+- **PDF Generation**: jsPDF (`v4.2.1`)
+- **Testing & Tooling**: Vitest (`v4.0.8`), Angular CLI (`v21.2.18`)
 
 ### Backend REST API
-- **Runtime Environment**: Node.js (v18.x / v20.x)
-- **Web Framework**: Express.js (v5.x REST API)
-- **Database & ODM**: MongoDB & Mongoose (v8.x)
-- **Security & Auth**: JWT (JSON Web Tokens), Bcrypt password hashing
-- **Email Transport**: Nodemailer (SMTP integration for reset token emails)
-- **Document Exporters**: PDFKit (Dynamic PDF builder), json2csv (CSV transformer)
-- **Environment**: Dotenv
+- **Runtime Environment**: Node.js (`v18.x` / `v20.x`)
+- **Web Framework**: Express.js (`v5.2.1` REST API)
+- **Database & ODM**: MongoDB & Mongoose (`v8.0.0`)
+- **Security & Auth**: JWT (`jsonwebtoken` `v9.0.3`), Bcrypt password hashing (`v6.0.0`), Express Rate Limit (`v8.6.2`)
+- **Email Transport**: Nodemailer (`v9.0.3` SMTP integration for reset token emails)
+- **Document Exporters**: PDFKit (`v0.19.1` dynamic PDF builder), json2csv (`v6.0.0-alpha.2`)
+- **Environment**: Dotenv (`v17.4.2`), CORS (`v2.8.6`)
+
+---
+
+## 🌐 Production Architecture & Deployment Matrix
+
+```
+                      +-----------------------------+
+                      |    User Web Browser         |
+                      +--------------+--------------+
+                                     |
+                    HTTPS Request    |    HTTPS REST API
+                    (Single Page App)|    (JWT Auth)
+                                     v
+         +---------------------------+---------------------------+
+         |                                                       |
+         v                                                       v
++------------------------+                             +-------------------+
+|  Vercel Frontend Host  |                             | Render API Host   |
+|  taxpal-blue.vercel.app|                             | taxpal-f8g1.onrender.com |
+|  (Angular SPA + vercel.json)                         | (Express REST API)|
++------------------------+                             +---------+---------+
+                                                                 |
+                                                          Mongoose ODM
+                                                                 v
+                                                       +-------------------+
+                                                       | MongoDB Atlas DB  |
+                                                       | Cloud Cluster     |
+                                                       +-------------------+
+```
+
+- **Frontend Hosting (Vercel)**: Serves compiled Angular assets with URL rewriting via [`frontend/vercel.json`](file:///c:/Users/igved/Documents/infosys-project/TaxPal-Batch-4/frontend/vercel.json) to handle SPA client-side routing.
+- **Backend Hosting (Render)**: Runs the Express REST API container. Reads configuration from environment variables (`FRONTEND_URL`, `MONGODB_URI`, `JWT_SECRET`, `PORT`).
+- **Database (MongoDB Atlas)**: Cloud database cluster handling persistent collections for users, transactions, budgets, custom categories, tax estimates, reports, and alerts.
+- **CORS Protection**: Express backend whitelist validates requests originating from `https://taxpal-blue.vercel.app` and local dev origins.
 
 ---
 
@@ -104,6 +149,7 @@ TaxPal-Batch-4/
 │   │   └── app.js            # Express app configuration & middleware routing
 │   ├── server.js             # Node.js server entry point & HTTP listener
 │   ├── package.json          # Backend dependencies & scripts
+│   ├── .env.example          # Template for backend environment configuration
 │   └── README.md             # Backend technical documentation & API guide
 │
 ├── frontend/                 # Angular Standalone Frontend Client
@@ -115,9 +161,11 @@ TaxPal-Batch-4/
 │   │   │   ├── app.routes.ts # Frontend routing definitions & Auth Guard
 │   │   │   ├── auth.guard.ts # Session route protection guard
 │   │   │   └── models.ts     # TypeScript interfaces & data models
+│   │   ├── environments/     # Production & environment API endpoints (environment.ts)
 │   │   ├── public/           # Static assets (icons, images)
 │   │   └── styles.css        # TailwindCSS imports & global styles
 │   ├── angular.json          # Angular CLI configuration
+│   ├── vercel.json           # Vercel deployment & SPA rewrite routing config
 │   ├── package.json          # Frontend dependencies & scripts
 │   └── README.md             # Frontend setup & architecture guide
 │
@@ -163,64 +211,78 @@ All endpoints requiring authentication must pass a valid JWT token in the header
 
 ---
 
-## 🛠️ Step-by-Step Installation & Quickstart Guide
+## 🛠️ Installation & Setup Guides
 
 ### Prerequisites
-- **Node.js**: `v18.x` or `v20.x` recommended
-- **npm**: `v10+` (packaged with Node.js)
-- **MongoDB**: Running locally (`mongodb://localhost:27017`) or a MongoDB Atlas URI
+- **Node.js**: `v18.x` or `v20.x`
+- **npm**: `v10+`
+- **MongoDB**: Local instance (`mongodb://localhost:27017`) or MongoDB Atlas Cluster
 
 ---
 
-### 1. Backend Setup
+### Local Development Quickstart
 
-1. Open terminal and navigate to the backend folder:
+#### 1. Backend Setup
+1. Navigate to `backend/`:
    ```bash
    cd backend
    ```
-2. Install Node.js dependencies:
+2. Install dependencies:
    ```bash
    npm install
    ```
-3. Create a `.env` configuration file inside `backend/` (refer to `.env.example`):
+3. Create `.env` file (refer to `.env.example`):
    ```env
    PORT=5000
-   JWT_SECRET=your_jwt_secret_key_here
+   JWT_SECRET=your_super_secret_jwt_key
    MONGODB_URI=mongodb://localhost:27017/taxpal
-   DB_NAME=taxpal
-   DB_HOST=localhost
-   SMTP_HOST=smtp.gmail.com
-   SMTP_PORT=587
-   SMTP_USER=your_email@gmail.com
-   SMTP_PASSWORD=your_app_password
    FRONTEND_URL=http://localhost:4200
    ```
-4. Launch the Express API development server:
+4. Start development server:
    ```bash
    npm run dev
    ```
-   The API server will run on `http://localhost:5000`.
+   Backend listens at `http://localhost:5000`.
 
----
-
-### 2. Frontend Setup
-
-1. Open a second terminal window and navigate to the frontend directory:
+#### 2. Frontend Setup
+1. Open a new terminal and navigate to `frontend/`:
    ```bash
    cd frontend
    ```
-2. Install Angular dependencies:
+2. Install dependencies:
    ```bash
    npm install
    ```
-3. Launch the Angular CLI development server:
+3. Start Angular CLI development server:
    ```bash
    npm start
    ```
-4. Open your browser and navigate to:
-   ```
-   http://localhost:4200
-   ```
+4. Open your browser at `http://localhost:4200`.
+
+---
+
+### Production Deployment Procedure
+
+#### Deploying Backend REST API to Render
+1. Create a new **Web Service** on [Render](https://render.com).
+2. Connect your Git repository and set root directory to `backend`.
+3. Set Build Command: `npm install`
+4. Set Start Command: `npm start`
+5. Configure Environment Variables in Render Dashboard:
+   - `PORT`: `10000` (or leave default, Render sets `PORT` automatically)
+   - `JWT_SECRET`: `<your_production_jwt_secret>`
+   - `MONGODB_URI`: `<your_mongodb_atlas_connection_string>`
+   - `FRONTEND_URL`: `https://taxpal-blue.vercel.app`
+   - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`: `<your_smtp_credentials>`
+
+#### Deploying Frontend Client to Vercel
+1. Create a new project on [Vercel](https://vercel.com).
+2. Connect repository and select the `frontend` directory as Root Directory.
+3. Vercel automatically detects Angular configuration.
+4. Verify build settings:
+   - Build Command: `ng build`
+   - Output Directory: `dist/taxpal-web/browser`
+5. Deploy! Vercel uses `vercel.json` to configure SPA rewrites.
 
 ---
 
