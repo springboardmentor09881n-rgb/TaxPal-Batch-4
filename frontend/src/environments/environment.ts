@@ -1,4 +1,4 @@
 export const environment = {
   production: false,
-  apiUrl: 'https://taxpal-f8g1.onrender.com/api'
+  apiUrl: 'http://localhost:5000/api'
 };
